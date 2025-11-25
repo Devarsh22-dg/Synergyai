@@ -1,0 +1,2 @@
+# Synergyai
+Functional tool
