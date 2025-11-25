@@ -1,6 +1,9 @@
 streamlit
 pandas
 scikit-learn
+python-docx   # For reading .docx files (Word)
+openpyxl      # For reading .xlsx files (Excel)
+pypdf         # For reading .pdf files
 # Optional: Add libraries for specific AI/Visualization features
 # google-genai
 # openai
