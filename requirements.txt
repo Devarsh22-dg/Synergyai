@@ -1,4 +1,7 @@
 streamlit
 pandas
-pypdf
-numpy
+scikit-learn
+# Optional: Add libraries for specific AI/Visualization features
+# google-genai
+# openai
+# plotly
