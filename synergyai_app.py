@@ -29,14 +29,24 @@ def ba_module():
         st.subheader("1. Elicitation Analysis & Gap Detector")
         st.markdown("Upload raw notes or transcripts. AI will structure needs and identify open questions.")
         
-        uploaded_file = st.file_uploader("Upload Notes/Transcript (.txt, .pdf):", type=['txt', 'pdf'])
+        # --- File Uploader Updated to accept many formats ---
+        uploaded_file = st.file_uploader(
+            "Upload Notes/Transcript or Document:", 
+            type=['txt', 'pdf', 'docx', 'xlsx', 'csv']
+        )
+        st.info("⚠️ **Note on File Intake:** For proprietary formats (e.g., Apple Pages/Numbers, Visio, or live Google Docs/Sheets), please export the content to a universal format like `.docx`, `.pdf`, or `.txt` before uploading.")
+        # ---------------------------------------------------
         
         if st.button("Analyze for Gaps"):
             if uploaded_file is not None:
-                with st.spinner('Parsing text and cross-referencing against standards...'):
-                    time.sleep(2) 
+                # Placeholder for file content extraction logic
+                file_name = uploaded_file.name
+                file_ext = file_name.split('.')[-1]
+
+                with st.spinner(f'Parsing {file_ext} and cross-referencing against standards...'):
+                    time.sleep(2) # Simulate AI processing time
                 
-                st.success("Analysis Complete. Found 3 critical ambiguities.")
+                st.success(f"Analysis Complete for {file_name}. Found 3 critical ambiguities.")
                 st.metric(label="Requirements Risk Score", value=f"{random.randint(60, 90)}/100 (High)", delta="+10% from last analysis")
                 
                 st.markdown("### ❓ Open Questions for Stakeholders")
@@ -115,7 +125,7 @@ def ba_module():
         st.subheader("4. Meeting Intelligence & Actionizer")
         st.markdown("Transform raw meeting transcripts into structured minutes, decisions, and action items.")
         
-        uploaded_transcript = st.file_uploader("Upload Meeting Transcript (.txt):", type=['txt'])
+        uploaded_transcript = st.file_uploader("Upload Meeting Transcript (.txt or .docx):", type=['txt', 'docx'])
         
         if st.button("Process Transcript"):
             if uploaded_transcript is not None:
@@ -164,8 +174,6 @@ st.sidebar.title("SynergyAI Modules")
 role = st.sidebar.radio("Select Your Role", ["Business Analyst (BA)", "Project Manager (PM)", "Program Manager (PgM)"])
 
 st.sidebar.markdown("---")
-# SynergyBot Chat integrated into the main page footer (outside of the role view)
-# st.sidebar.subheader("🤖 SynergyBot (AI Assistant)")
 
 # --- Display Selected Module ---
 if role == "Business Analyst (BA)":
