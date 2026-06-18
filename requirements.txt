@@ -1,0 +1,6 @@
+streamlit
+pandas
+anthropic
+python-docx   # For reading .docx files (Word)
+openpyxl      # For reading .xlsx files (Excel)
+pypdf         # For reading .pdf files
