@@ -1,10 +1,10 @@
 import os
-import io
 import streamlit as st
 import pandas as pd
 import anthropic
 import pypdf
 from docx import Document
+from datetime import datetime
 
 # --- Configuration & Setup ---
 st.set_page_config(layout="wide", page_title="SynergyAI: Consulting Accelerator")
@@ -12,8 +12,8 @@ st.set_page_config(layout="wide", page_title="SynergyAI: Consulting Accelerator"
 DEFAULT_MODEL = "claude-sonnet-4-6"
 FAST_MODEL = "claude-haiku-4-5-20251001"
 
-PROJECTS = ["Alpha-FinTech Migration", "Beta-Supply Chain Optimization", "Gamma-HR Platform Rollout"]
-USERS = ["Alice (BA)", "Bob (PM)", "Charlie (PgM)"]
+STARTER_PROJECTS = ["Alpha-FinTech Migration", "Beta-Supply Chain Optimization", "Gamma-HR Platform Rollout"]
+PROJECT_STATUSES = ["Planning", "In Progress", "On Hold", "Complete"]
 
 CHATBOT_SYSTEM_PROMPT = (
     "You are SynergyBot, an AI assistant embedded in a tool used by business analysts, "
@@ -124,6 +124,57 @@ MEETING_SCHEMA = {
     },
     "required": ["summary", "decisions", "action_items"],
 }
+
+
+# --- Project State Management ---
+
+def default_project():
+    return {
+        "description": "",
+        "client": "",
+        "status": "Planning",
+        "documents": [],          # list of {"name","text","ext","added_at","char_count"}
+        "extracted_text": "",     # last combined text analyzed in Elicitation tab
+        "last_notes": "",         # last notes used in Elicitation tab
+        "gap_analysis": None,
+        "stories": [],
+        "stories_drafted": 0,
+        "documents_drafted": 0,
+        "last_doc_draft": None,
+        "last_doc_type": None,
+        "meeting_result": None,
+    }
+
+
+def init_projects():
+    if "projects" not in st.session_state:
+        st.session_state["projects"] = {name: default_project() for name in STARTER_PROJECTS}
+    if "current_project" not in st.session_state:
+        st.session_state["current_project"] = STARTER_PROJECTS[0]
+
+
+def get_current_project_name():
+    return st.session_state.get("current_project")
+
+
+def get_project():
+    name = get_current_project_name()
+    if name not in st.session_state["projects"]:
+        st.session_state["projects"][name] = default_project()
+    return st.session_state["projects"][name]
+
+
+def add_doc_to_repo(proj, name, text, ext):
+    existing_names = {d["name"] for d in proj["documents"]}
+    if name in existing_names:
+        proj["documents"] = [d for d in proj["documents"] if d["name"] != name]
+    proj["documents"].append({
+        "name": name,
+        "text": text,
+        "ext": ext,
+        "added_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "char_count": len(text),
+    })
 
 
 # --- API Helpers ---
@@ -269,19 +320,26 @@ def truncate(text, limit=MAX_CHARS):
 
 # --- AI Task Functions ---
 
-def analyze_gaps(text):
+def analyze_gaps(text, notes=None):
     truncated_text, was_truncated = truncate(text)
     if was_truncated:
-        st.caption(f"⚠️ Document was long — analyzing the first {MAX_CHARS:,} characters.")
+        st.caption(f"⚠️ Document content was long — analyzing the first {MAX_CHARS:,} characters.")
     system = (
         "You are a senior business analyst performing a requirements quality review. "
-        "Carefully read the provided notes/transcript and identify ambiguities, missing "
+        "Carefully read the provided notes/documents and identify ambiguities, missing "
         "non-functional requirements (performance, security, availability, etc.), stakeholder "
         "conflicts, and scope risks. Be specific and ground every finding in something actually "
         "present (or notably absent) in the text — do not invent details. If the text is sparse, "
         "it's fine to return fewer findings and a lower risk score."
     )
     user_prompt = f"Analyze the following content:\n\n{truncated_text}"
+    if notes and notes.strip():
+        user_prompt += (
+            "\n\n---\nThe business analyst has also provided the following additional notes/context. "
+            "You MUST factor these into your analysis — they may resolve an apparent gap, introduce "
+            "a new constraint or decision, or point you toward something specific to scrutinize:\n"
+            f"{notes.strip()}"
+        )
     return call_structured(
         system, user_prompt,
         "submit_gap_analysis",
@@ -300,7 +358,8 @@ def generate_document(doc_type, context_text, user_suggestion):
     user_prompt = (
         f"Document type to draft: {doc_type}\n\n"
         f"Special instructions / focus areas from the analyst:\n{user_suggestion}\n\n"
-        f"Source content / requirements notes to base this on:\n{context_text if context_text.strip() else '(No source content provided — draft a generic template with clear placeholder sections.)'}"
+        f"Source content / requirements notes to base this on:\n"
+        f"{context_text if context_text.strip() else '(No source content provided — draft a generic template with clear placeholder sections.)'}"
     )
     return call_text(system, user_prompt, max_tokens=2500)
 
@@ -343,7 +402,15 @@ def process_meeting(transcript_text):
 
 
 def chat_with_bot(history):
-    return call_chat(CHATBOT_SYSTEM_PROMPT, history, max_tokens=800)
+    proj = get_project()
+    proj_name = get_current_project_name()
+    context_note = f"\n\nThe user is currently working in the '{proj_name}' project."
+    if proj.get("description"):
+        context_note += f" Project description: {proj['description'][:500]}"
+    if proj.get("documents"):
+        doc_names = ", ".join(d["name"] for d in proj["documents"][:10])
+        context_note += f" Documents in this project's repository: {doc_names}."
+    return call_chat(CHATBOT_SYSTEM_PROMPT + context_note, history, max_tokens=800)
 
 
 # --- Role-Specific Functions ---
@@ -352,7 +419,11 @@ def ba_module():
     st.header("💼 Strategic Requirements Hub")
     st.caption("AI-Augmented tools for Elicitation, Documentation, and Agile Workflow.")
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    cp = get_current_project_name()
+    proj = get_project()
+
+    tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📁 Project & Documents",
         "🔍 Elicitation Analysis & Gap Detector",
         "📝 Automated Documentation Generator",
         "🎯 Agile Story & Backlog Creator",
@@ -360,37 +431,164 @@ def ba_module():
         "⚙️ BA Dashboard"
     ])
 
+    # --- Tab 0: Project & Documents ---
+    with tab0:
+        st.subheader("Project Information & Document Repository")
+        st.markdown(f"### Active Project: **{cp}**")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            proj["client"] = st.text_input(
+                "Client / Stakeholder", value=proj.get("client", ""), key=f"client_{cp}"
+            )
+        with col2:
+            proj["status"] = st.selectbox(
+                "Status", PROJECT_STATUSES,
+                index=PROJECT_STATUSES.index(proj.get("status", "Planning")),
+                key=f"status_{cp}",
+            )
+
+        proj["description"] = st.text_area(
+            "Project Description / Background",
+            value=proj.get("description", ""),
+            height=120,
+            key=f"desc_{cp}",
+        )
+
+        st.markdown("---")
+        st.markdown("#### ➕ Create a New Project")
+        with st.form(key="new_project_form", clear_on_submit=True):
+            new_name = st.text_input("New Project Name")
+            new_desc = st.text_area("Description (optional)", height=80)
+            submitted = st.form_submit_button("Create Project")
+            if submitted:
+                if not new_name.strip():
+                    st.warning("Give the project a name.")
+                elif new_name in st.session_state["projects"]:
+                    st.warning("A project with this name already exists.")
+                else:
+                    new_proj = default_project()
+                    new_proj["description"] = new_desc
+                    st.session_state["projects"][new_name] = new_proj
+                    st.session_state["current_project"] = new_name
+                    st.success(f"Created project '{new_name}'.")
+                    st.rerun()
+
+        st.markdown("---")
+        st.markdown("#### 📚 Document Repository")
+        st.caption(
+            "Documents added here are available as context to the Elicitation Analysis, "
+            "Documentation Generator, and Story Creator tabs for this project."
+        )
+
+        repo_files = st.file_uploader(
+            "Add documents to this project's repository",
+            type=['txt', 'pdf', 'docx', 'xlsx', 'csv'],
+            accept_multiple_files=True,
+            key=f"repo_uploader_{cp}",
+        )
+        if st.button("Add to Repository", key=f"add_repo_btn_{cp}"):
+            if not repo_files:
+                st.warning("Choose at least one file first.")
+            else:
+                added = 0
+                for f in repo_files:
+                    text = extract_text_from_upload(f)
+                    if text.strip():
+                        add_doc_to_repo(proj, f.name, text, f.name.split(".")[-1].lower())
+                        added += 1
+                st.success(f"Added {added} document(s) to the repository.")
+                st.rerun()
+
+        if proj["documents"]:
+            st.markdown(f"**{len(proj['documents'])} document(s) in repository:**")
+            for i, doc in enumerate(proj["documents"]):
+                c1, c2, c3, c4 = st.columns([4, 1, 2, 1])
+                c1.write(f"📄 {doc['name']}")
+                c2.write(doc["ext"].upper())
+                c3.write(f"{doc['char_count']:,} chars · added {doc['added_at']}")
+                if c4.button("🗑️ Remove", key=f"del_doc_{cp}_{i}"):
+                    proj["documents"].pop(i)
+                    st.rerun()
+        else:
+            st.info("No documents yet. Upload files above to build this project's repository.")
+
     # --- Tab 1: Elicitation Analysis ---
     with tab1:
         st.subheader("1. Elicitation Analysis & Gap Detector")
+        st.caption(f"Active project: **{cp}**")
         st.markdown("Upload raw notes or transcripts. AI will structure needs and identify open questions.")
 
+        repo_doc_names = [d["name"] for d in proj["documents"]]
+        selected_repo_docs = []
+        if repo_doc_names:
+            selected_repo_docs = st.multiselect(
+                "Include documents already in this project's repository:",
+                repo_doc_names,
+                default=repo_doc_names,
+                key=f"elicit_repo_select_{cp}",
+            )
+
         uploaded_file = st.file_uploader(
-            "Upload Notes/Transcript or Document:",
+            "Upload a new Notes/Transcript or Document for this analysis:",
             type=['txt', 'pdf', 'docx', 'xlsx', 'csv'],
-            key="gap_uploader",
+            key=f"gap_uploader_{cp}",
         )
         st.info("⚠️ **Note on File Intake:** For proprietary formats (e.g., Apple Pages/Numbers, Visio, or live Google Docs/Sheets), please export the content to a universal format like `.docx`, `.pdf`, or `.txt` before uploading.")
 
-        if st.button("Analyze for Gaps", key="analyze_gaps_btn"):
-            if uploaded_file is not None:
-                with st.spinner("Extracting text from document..."):
-                    text = extract_text_from_upload(uploaded_file)
-                if not text.strip():
-                    st.error("Couldn't extract any readable text from this file. Try a different format.")
-                else:
-                    st.session_state["extracted_text"] = text
-                    with st.spinner("Cross-referencing against requirements quality standards..."):
-                        result = analyze_gaps(text)
-                    if result:
-                        st.session_state["gap_analysis"] = result
-            else:
-                st.warning("Please upload a file to analyze.")
+        save_to_repo = False
+        if uploaded_file is not None:
+            save_to_repo = st.checkbox(
+                "Also add this file to the project's document repository",
+                value=True,
+                key=f"gap_save_to_repo_{cp}",
+            )
 
-        result = st.session_state.get("gap_analysis")
+        notes = st.text_area(
+            "📝 Additional Notes / Context (optional):",
+            placeholder=(
+                "e.g., Focus on the payments workflow. The budget ceiling of $1M was confirmed "
+                "by the sponsor on 6/10 — flag anything that conflicts with it."
+            ),
+            key=f"elicit_notes_{cp}",
+            height=100,
+        )
+        if notes and notes.strip():
+            st.caption("✅ These notes will be factored into the analysis.")
+
+        if st.button("Analyze for Gaps", key=f"analyze_gaps_btn_{cp}"):
+            combined_parts = []
+            for name in selected_repo_docs:
+                doc = next((d for d in proj["documents"] if d["name"] == name), None)
+                if doc:
+                    combined_parts.append(f"--- Repository Document: {name} ---\n{doc['text']}")
+
+            if uploaded_file is not None:
+                with st.spinner("Extracting text from uploaded document..."):
+                    new_text = extract_text_from_upload(uploaded_file)
+                if new_text.strip():
+                    combined_parts.append(f"--- Uploaded Document: {uploaded_file.name} ---\n{new_text}")
+                    if save_to_repo:
+                        add_doc_to_repo(proj, uploaded_file.name, new_text, uploaded_file.name.split(".")[-1].lower())
+
+            combined_text = "\n\n".join(combined_parts)
+
+            if not combined_text.strip():
+                st.warning("Upload a document or select at least one repository document to analyze.")
+            else:
+                proj["extracted_text"] = combined_text
+                proj["last_notes"] = notes or ""
+                with st.spinner("Cross-referencing against requirements quality standards..."):
+                    result = analyze_gaps(combined_text, notes=notes)
+                if result:
+                    proj["gap_analysis"] = result
+
+        result = proj.get("gap_analysis")
         if result:
             n_open = len(result.get("open_questions", []))
             st.success(f"Analysis complete. Found {n_open} open item(s) for stakeholder follow-up.")
+            if proj.get("last_notes"):
+                st.caption(f"📝 Notes accounted for: \"{proj['last_notes'][:200]}\"")
             if result.get("summary"):
                 st.caption(result["summary"])
             st.metric(
@@ -412,34 +610,34 @@ def ba_module():
         doc_type = st.selectbox(
             "Select Document Type to Draft",
             list(DOC_TYPE_CODES.keys()),
-            key="doc_type_select",
+            key=f"doc_type_select_{cp}",
         )
 
-        prefill = st.session_state.get("extracted_text", "")
+        prefill = proj.get("extracted_text", "")
         context_text = st.text_area(
             "Source content (auto-filled from the Elicitation tab if available — edit freely):",
             value=prefill[:3000],
             height=150,
-            key="doc_context",
+            key=f"doc_context_{cp}",
         )
 
         user_suggestion = st.text_area(
             "Provide specific instructions or focus areas:",
             "e.g., Ensure the regulatory compliance section is highly detailed.",
-            key="doc_suggestion",
+            key=f"doc_suggestion_{cp}",
         )
 
-        if st.button(f"Generate Draft {doc_type}", key="generate_doc_btn"):
+        if st.button(f"Generate Draft {doc_type}", key=f"generate_doc_btn_{cp}"):
             with st.spinner(f"Drafting {doc_type}..."):
                 draft = generate_document(doc_type, context_text, user_suggestion)
             if draft:
-                st.session_state["documents_drafted"] = st.session_state.get("documents_drafted", 0) + 1
-                st.session_state["last_doc_draft"] = draft
-                st.session_state["last_doc_type"] = doc_type
+                proj["documents_drafted"] = proj.get("documents_drafted", 0) + 1
+                proj["last_doc_draft"] = draft
+                proj["last_doc_type"] = doc_type
 
-        draft = st.session_state.get("last_doc_draft")
+        draft = proj.get("last_doc_draft")
         if draft:
-            st.success(f"Draft of {st.session_state.get('last_doc_type', doc_type)} generated.")
+            st.success(f"Draft of {proj.get('last_doc_type', doc_type)} generated.")
             st.markdown(draft)
             st.download_button(
                 "⬇️ Download Draft (.md)",
@@ -455,26 +653,26 @@ def ba_module():
 
         source_text = st.text_area(
             "Requirements / notes to convert into stories (auto-filled from Elicitation tab if available):",
-            value=st.session_state.get("extracted_text", "")[:3000],
+            value=proj.get("extracted_text", "")[:3000],
             height=150,
-            key="story_source",
+            key=f"story_source_{cp}",
         )
 
-        if st.button("Generate User Stories & Acceptance Criteria", key="generate_stories_btn"):
+        if st.button("Generate User Stories & Acceptance Criteria", key=f"generate_stories_btn_{cp}"):
             if not source_text.strip():
                 st.warning("Add some requirements text first.")
             else:
                 with st.spinner("Drafting user stories and acceptance criteria..."):
                     stories = generate_stories(source_text)
                 if stories:
-                    st.session_state["stories"] = stories
-                    st.session_state["stories_drafted"] = st.session_state.get("stories_drafted", 0) + len(stories)
+                    proj["stories"] = stories
+                    proj["stories_drafted"] = proj.get("stories_drafted", 0) + len(stories)
 
-        stories = st.session_state.get("stories", [])
+        stories = proj.get("stories", [])
         if stories:
             st.markdown("### User Story Drafts")
             story_df = pd.DataFrame(stories)
-            edited_df = st.data_editor(story_df, use_container_width=True, num_rows="dynamic", key="story_editor")
+            edited_df = st.data_editor(story_df, use_container_width=True, num_rows="dynamic", key=f"story_editor_{cp}")
 
             csv_data = edited_df.to_csv(index=False)
             st.download_button(
@@ -494,10 +692,10 @@ def ba_module():
         uploaded_transcript = st.file_uploader(
             "Upload Meeting Transcript (.txt or .docx):",
             type=['txt', 'docx'],
-            key="transcript_uploader",
+            key=f"transcript_uploader_{cp}",
         )
 
-        if st.button("Process Transcript", key="process_transcript_btn"):
+        if st.button("Process Transcript", key=f"process_transcript_btn_{cp}"):
             if uploaded_transcript is not None:
                 with st.spinner("Extracting text..."):
                     text = extract_text_from_upload(uploaded_transcript)
@@ -507,11 +705,11 @@ def ba_module():
                     with st.spinner("Extracting decisions, owners, and actions..."):
                         result = process_meeting(text)
                     if result:
-                        st.session_state["meeting_result"] = result
+                        proj["meeting_result"] = result
             else:
                 st.warning("Please upload a transcript to process.")
 
-        result = st.session_state.get("meeting_result")
+        result = proj.get("meeting_result")
         if result:
             st.success("Meeting summary generated.")
             st.markdown("### 📄 Executive Summary")
@@ -540,26 +738,27 @@ def ba_module():
     # --- Tab 5: BA Dashboard ---
     with tab5:
         st.subheader("5. BA Dashboard")
-        st.markdown("Summary view of activity in this session.")
+        st.markdown(f"Summary view for **{cp}** in this session.")
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("User Stories Drafted (this session)", st.session_state.get("stories_drafted", 0))
-        col2.metric("Documents Drafted (this session)", st.session_state.get("documents_drafted", 0))
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("User Stories Drafted", proj.get("stories_drafted", 0))
+        col2.metric("Documents Drafted", proj.get("documents_drafted", 0))
+        col3.metric("Repository Documents", len(proj.get("documents", [])))
 
-        gap_result = st.session_state.get("gap_analysis")
+        gap_result = proj.get("gap_analysis")
         open_gaps = len(gap_result.get("open_questions", [])) if gap_result else 0
-        col3.metric("Open Gaps (latest analysis)", open_gaps)
+        col4.metric("Open Gaps (latest analysis)", open_gaps)
 
         st.caption(
-            "These metrics reflect activity in your current browser session only. Tracking activity "
-            "across sessions/users would require a persistent database backend."
+            "These metrics reflect activity for this project in your current browser session only. "
+            "Tracking activity persistently across sessions/users would require a database backend."
         )
 
 
 def pm_module():
     st.header("🗓️ Project Managers: Predictive Risk & Health (Placeholder)")
     st.markdown("View predictive metrics, resource optimization, and automated status reports.")
-    st.selectbox("Select Project to View", PROJECTS)
+    st.selectbox("Select Project to View", list(st.session_state["projects"].keys()))
     st.info("PM features (Project Health Forecaster, Constraint Solver) haven't been built yet — this module is still a placeholder.")
 
 
@@ -571,7 +770,16 @@ def pgm_module():
 
 # --- Main App Navigation ---
 
-st.sidebar.title("SynergyAI Modules")
+init_projects()
+
+st.sidebar.title("SynergyAI")
+
+st.sidebar.subheader("📁 Active Project")
+project_names = list(st.session_state["projects"].keys())
+st.sidebar.selectbox("Select Project", project_names, key="current_project")
+
+st.sidebar.markdown("---")
+st.sidebar.title("Modules")
 role = st.sidebar.radio("Select Your Role", ["Business Analyst (BA)", "Project Manager (PM)", "Program Manager (PgM)"])
 
 st.sidebar.markdown("---")
