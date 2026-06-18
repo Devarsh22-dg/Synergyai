@@ -470,7 +470,10 @@ def ba_module():
                     new_proj = default_project()
                     new_proj["description"] = new_desc
                     st.session_state["projects"][new_name] = new_proj
-                    st.session_state["current_project"] = new_name
+                    # Can't reassign the sidebar selectbox's session_state key directly here —
+                    # it already rendered earlier in this script run. Defer the switch to the
+                    # top of the next run, before that widget is instantiated.
+                    st.session_state["pending_project_switch"] = new_name
                     st.success(f"Created project '{new_name}'.")
                     st.rerun()
 
@@ -771,6 +774,14 @@ def pgm_module():
 # --- Main App Navigation ---
 
 init_projects()
+
+# Apply any pending project switch (e.g. from creating a new project) BEFORE the
+# sidebar selectbox below is instantiated — Streamlit won't allow setting a widget's
+# session_state value after that widget has already rendered in the same run.
+if "pending_project_switch" in st.session_state:
+    _target = st.session_state.pop("pending_project_switch")
+    if _target in st.session_state["projects"]:
+        st.session_state["current_project"] = _target
 
 st.sidebar.title("SynergyAI")
 
