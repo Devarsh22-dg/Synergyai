@@ -1,6 +1,9 @@
 streamlit
 pandas
 anthropic
-python-docx   # For reading .docx files (Word)
-openpyxl      # For reading .xlsx files (Excel)
-pypdf         # For reading .pdf files
+python-docx   # For reading/writing .docx files (Word) — including bold/strike formatting and comments
+openpyxl      # For reading/writing .xlsx files (Excel)
+pypdf         # For reading .pdf files and their comment annotations
+requests      # For fetching public webpage content (Source URLs)
+beautifulsoup4  # For parsing fetched webpage HTML into clean text
+ 
