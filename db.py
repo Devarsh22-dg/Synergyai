@@ -82,6 +82,19 @@ def create_user(username, email, password_hash):
         return cur.lastrowid
 
 
+def update_pending_user(user_id, username, password_hash):
+    """Updates an unverified account's username/password — used when someone
+    re-submits the signup form for an email that already has an unverified,
+    abandoned account (e.g. the first OTP email never arrived). Only ever
+    call this on a row where email_verified = 0; verified accounts must not
+    be silently modified this way."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET username = ?, password_hash = ? WHERE id = ? AND email_verified = 0",
+            (username, password_hash, user_id),
+        )
+
+
 def get_user_by_username(username):
     with _connect() as conn:
         row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()

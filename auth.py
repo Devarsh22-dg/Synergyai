@@ -91,19 +91,36 @@ def _render_signup():
     if password != confirm:
         st.error("Passwords don't match.")
         return
-    if db.get_user_by_username(username):
-        st.error("That username is already taken.")
-        return
-    if db.get_user_by_email(email):
+
+    existing_by_email = db.get_user_by_email(email)
+    existing_by_username = db.get_user_by_username(username)
+
+    if existing_by_email and existing_by_email["email_verified"]:
         st.error("An account with that email already exists. Try logging in instead.")
+        return
+    if existing_by_username and existing_by_username["email"] != email:
+        if existing_by_username["email_verified"]:
+            st.error("That username is already taken.")
+        else:
+            st.error("That username is pending verification under a different email. Choose a different username.")
         return
 
     password_hash = stauth.Hasher.hash(password)
-    try:
-        user_id = db.create_user(username, email, password_hash)
-    except Exception as e:
-        st.error(f"Couldn't create account: {e}")
-        return
+
+    if existing_by_email:
+        # An unverified, abandoned signup for this email already exists — most
+        # likely the first verification email never arrived. Resume it instead
+        # of permanently blocking this email address: update the username/
+        # password in case they changed, and send a fresh code below.
+        user_id = existing_by_email["id"]
+        db.update_pending_user(user_id, username, password_hash)
+        st.info("Resuming your previous signup for this email — sending a new code.")
+    else:
+        try:
+            user_id = db.create_user(username, email, password_hash)
+        except Exception as e:
+            st.error(f"Couldn't create account: {e}")
+            return
 
     code = otp_email.generate_otp()
     db.create_otp(user_id, otp_email.hash_otp(code), otp_email.SIGNUP_PURPOSE, otp_email.otp_expiry_iso())
