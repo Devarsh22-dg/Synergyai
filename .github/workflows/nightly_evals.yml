@@ -1,0 +1,40 @@
+name: Nightly Evals
+
+on:
+  schedule:
+    # 07:00 UTC daily — runs before the nightly maintenance routine (08:00 UTC)
+    # so its report is fresh when that routine reads it.
+    - cron: "0 7 * * *"
+  workflow_dispatch: {}   # lets you trigger a run manually from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  run-evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run eval harness
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python3 evals/run_evals.py
+
+      - name: Commit results
+        run: |
+          git config user.name "scopeforge-evals[bot]"
+          git config user.email "actions@github.com"
+          git add evals/runs.jsonl evals/LEARNED.md evals/latest_report.md
+          git diff --cached --quiet || git commit -m "Nightly eval run $(date -u +%Y-%m-%d)"
+          git push
+
+      - name: Check quality gate
+        run: python3 evals/check_evals.py

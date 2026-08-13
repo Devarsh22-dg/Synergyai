@@ -1,6 +1,7 @@
 import os
 import io
 import re
+import base64
 import requests
 from bs4 import BeautifulSoup
 import streamlit as st
@@ -8,6 +9,9 @@ import pandas as pd
 import anthropic
 import pypdf
 from docx import Document
+from pptx import Presentation
+from pptx.util import Emu
+from PIL import Image
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from datetime import datetime
@@ -66,6 +70,7 @@ SECTION_COLORS = {
     "elicitation": "#D9622B",  # ember orange
     "docgen": "#2F9E5B",       # forge green
     "story": "#4D6BAF",        # indigo blue
+    "traceability": "#3E7C7C", # teal
     "dashboard": "#C1485C",    # rose
     "pm": "#5C7A99",           # muted slate blue
     "pgm": "#8C6A4A",          # muted bronze
@@ -292,6 +297,148 @@ ASIS_TOBE_SCHEMA = {
     "required": ["steps"],
 }
 
+IMAGE_ANALYSIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "images": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "image_number": {"type": "integer", "description": "1-based index matching the order images were provided in."},
+                    "content_type": {
+                        "type": "string",
+                        "enum": ["Screenshot/UI", "Diagram/Flowchart", "Chart/Graph", "Table", "Photo", "Other"],
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "What the image shows — for screenshots, describe the UI/screen and any labels, fields, or text visible; for diagrams, describe the flow/relationships; for charts, describe the data trend and axis labels.",
+                    },
+                },
+                "required": ["image_number", "content_type", "description"],
+            },
+        }
+    },
+    "required": ["images"],
+}
+
+WORKSHOP_PREP_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "objectives": {"type": "string", "description": "1-2 sentences on what this workshop should achieve."},
+        "agenda": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string"},
+                    "duration_minutes": {"type": "integer"},
+                    "purpose": {"type": "string", "description": "Why this agenda item matters / what it should produce."},
+                },
+                "required": ["topic", "duration_minutes", "purpose"],
+            },
+        },
+        "questions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string", "description": "e.g. Scope, Process, Data, Constraints, Success Criteria."},
+                    "question": {"type": "string"},
+                },
+                "required": ["category", "question"],
+            },
+        },
+    },
+    "required": ["objectives", "agenda", "questions"],
+}
+
+TEST_CASE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "test_cases": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "test_id": {"type": "string", "description": "Sequential ID like TC-1, TC-2."},
+                    "related_story": {"type": "string", "description": "Short label for the source user story."},
+                    "scenario": {"type": "string", "description": "Short name of what this test verifies."},
+                    "preconditions": {"type": "string", "description": "Use 'None' if not applicable."},
+                    "steps": {"type": "string", "description": "Numbered test steps as a single string, e.g. '1. ... 2. ...'."},
+                    "expected_result": {"type": "string"},
+                    "priority": {"type": "string", "enum": ["High", "Medium", "Low"]},
+                },
+                "required": ["test_id", "related_story", "scenario", "preconditions", "steps", "expected_result", "priority"],
+            },
+        }
+    },
+    "required": ["test_cases"],
+}
+
+GLOSSARY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "terms": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "term": {"type": "string"},
+                    "definition": {"type": "string", "description": "Plain-language definition grounded in how the term is used in the source content."},
+                    "source_context": {"type": "string", "description": "Brief note on where/how this term appears in the source. Use 'General' if not tied to a specific spot."},
+                },
+                "required": ["term", "definition", "source_context"],
+            },
+        }
+    },
+    "required": ["terms"],
+}
+
+PRIORITIZATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "requirement": {"type": "string", "description": "Short label for the requirement/need."},
+                    "moscow_category": {"type": "string", "enum": ["Must Have", "Should Have", "Could Have", "Won't Have"]},
+                    "rationale": {"type": "string", "description": "Why this requirement falls into this category."},
+                },
+                "required": ["requirement", "moscow_category", "rationale"],
+            },
+        }
+    },
+    "required": ["items"],
+}
+
+CHANGE_IMPACT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string", "description": "One-paragraph plain-language summary of the change and its overall impact."},
+        "impact_level": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"]},
+        "affected_requirements": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "requirement": {"type": "string", "description": "The existing requirement/story affected, using its label from the source content."},
+                    "impact_description": {"type": "string", "description": "Specifically how this change affects it (conflicts, extends, invalidates, etc.)."},
+                },
+                "required": ["requirement", "impact_description"],
+            },
+        },
+        "recommended_actions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Concrete next steps, e.g. 'Re-confirm scope with sponsor', 'Update BRD section 4', 'Re-estimate story X'.",
+        },
+    },
+    "required": ["summary", "impact_level", "affected_requirements", "recommended_actions"],
+}
+
 
 # --- Project State Management ---
 
@@ -310,6 +457,14 @@ def default_project():
         "last_doc_draft": None,   # {"kind": "markdown"|"data_dictionary"|"asis_tobe", ...}
         "last_doc_type": None,
         "meeting_result": None,
+        "workshop_prep": None,
+        "test_cases": [],
+        "test_cases_drafted": 0,
+        "glossary": [],
+        "glossary_terms_found": 0,
+        "prioritization": None,
+        "rtm_rows": [],
+        "change_impact_history": [],   # list of {"request_text","result"} — most recent last
     }
 
 
@@ -425,17 +580,106 @@ def call_structured(system, user_prompt, tool_name, tool_description, schema, ma
         return None
 
 
+def call_structured_multimodal(system, content_blocks, tool_name, tool_description, schema, max_tokens=2000, model=None):
+    """Like call_structured, but the user turn is a list of content blocks (images + text)
+    instead of a plain string — used to send extracted images to Claude's vision model."""
+    client = get_client()
+    try:
+        resp = client.messages.create(
+            model=model or current_model(),
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": content_blocks}],
+            tools=[{"name": tool_name, "description": tool_description, "input_schema": schema}],
+            tool_choice={"type": "tool", "name": tool_name},
+        )
+        for block in resp.content:
+            if block.type == "tool_use" and block.name == tool_name:
+                return block.input
+        return None
+    except Exception as e:
+        st.warning(f"Image analysis skipped (AI request failed: {e}).")
+        return None
+
+
 # --- File Parsing (reading uploads) ---
 
 MAX_CHARS = 15000
+MAX_IMAGES_PER_DOC = 8       # cap vision calls per document — keeps cost/latency reasonable
+IMAGE_MAX_DIMENSION = 1200   # px, longest side — plenty for screenshots/diagrams, keeps payload small
 
 
-def extract_docx_with_formatting(uploaded_file):
+def _prepare_image_for_vision(image_bytes):
+    """Decodes arbitrary image bytes, downsizes if needed, and re-encodes as JPEG base64
+    for the vision API. Returns None if the bytes aren't a readable image (e.g. an EMF/WMF
+    vector graphic that PIL can't open, or a corrupt embed) rather than raising."""
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img = img.convert("RGB")
+        if max(img.size) > IMAGE_MAX_DIMENSION:
+            img.thumbnail((IMAGE_MAX_DIMENSION, IMAGE_MAX_DIMENSION))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        return base64.standard_b64encode(buf.getvalue()).decode("utf-8")
+    except Exception:
+        return None
+
+
+def describe_images_with_vision(images, source_name):
+    """Sends up to MAX_IMAGES_PER_DOC extracted images to Claude vision in a single call
+    and returns a list of description strings (content_type: description), in the same
+    order as the input images. Silently returns [] if there are no usable images or the
+    vision call fails — image description is a bonus signal, not a hard requirement for
+    the rest of the pipeline to work."""
+    if not images:
+        return []
+
+    prepared = []
+    for img_bytes in images[:MAX_IMAGES_PER_DOC]:
+        b64 = _prepare_image_for_vision(img_bytes)
+        if b64:
+            prepared.append(b64)
+    if not prepared:
+        return []
+
+    content_blocks = []
+    for b64 in prepared:
+        content_blocks.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+        })
+    content_blocks.append({
+        "type": "text",
+        "text": (
+            f"These are {len(prepared)} image(s) embedded in the document '{source_name}', in order. "
+            "Describe each one: if it's a screenshot of a UI/application, describe the screen, fields, "
+            "buttons, and any visible text or labels — these often encode real requirements. If it's a "
+            "diagram or flowchart, describe the steps/relationships shown. If it's a chart, describe the "
+            "data and trend. Submit one entry per image, numbered in order."
+        ),
+    })
+
+    result = call_structured_multimodal(
+        "You are a business analyst assistant that reads screenshots and diagrams embedded in "
+        "requirements documents and describes them precisely so their content can be analyzed as text.",
+        content_blocks, "submit_image_analysis", "Submit descriptions of the provided images.",
+        IMAGE_ANALYSIS_SCHEMA, max_tokens=2000,
+    )
+    if not result:
+        return []
+    descriptions = []
+    for item in result.get("images", []):
+        descriptions.append(f"[{item.get('content_type', 'Image')}] {item.get('description', '')}")
+    return descriptions
+
+
+def extract_docx_with_formatting(uploaded_file, describe_images=True):
     """Reads a .docx with formatting awareness instead of flattening to plain text.
     Bold runs are wrapped **like this**, struck-through runs ~~like this~~, and italic
     runs *like this* — markdown conventions the AI already understands, so emphasis and
     deprecated/removed content carry through as real signal. Inline comments (Word's
     actual comment feature, not Track Changes) are appended as a labeled section.
+    Embedded images (screenshots, diagrams) are extracted and described via Claude vision.
 
     Known limitation: Word's Track Changes redline deletions/insertions (the dotted
     underline / strikethrough you see when "Show Markup" is on) are a different XML
@@ -475,11 +719,27 @@ def extract_docx_with_formatting(uploaded_file):
         if comment_lines:
             body_text += "\n\n--- Reviewer Comments (from Word comments) ---\n" + "\n".join(comment_lines)
 
+    if describe_images:
+        image_bytes_list = []
+        for rel in doc.part.rels.values():
+            if "image" in rel.reltype:
+                try:
+                    image_bytes_list.append(rel.target_part.blob)
+                except Exception:
+                    continue
+        if image_bytes_list:
+            with st.spinner(f"Reading {min(len(image_bytes_list), MAX_IMAGES_PER_DOC)} embedded image(s)..."):
+                descriptions = describe_images_with_vision(image_bytes_list, uploaded_file.name)
+            if descriptions:
+                desc_lines = [f"{i+1}. {d}" for i, d in enumerate(descriptions)]
+                body_text += "\n\n--- Images/Screenshots Found in Document (AI-described) ---\n" + "\n".join(desc_lines)
+
     return body_text
 
 
-def extract_pdf_with_annotations(uploaded_file):
-    """Extracts PDF text plus any sticky-note/comment annotations. Bold/strikethrough
+def extract_pdf_with_annotations(uploaded_file, describe_images=True):
+    """Extracts PDF text plus any sticky-note/comment annotations, and describes any
+    embedded images (scanned screenshots, diagrams) via Claude vision. Bold/strikethrough
     detection isn't attempted for PDFs — pypdf's text extraction doesn't expose per-
     character font styling, and strikethrough in a PDF is often just a drawn line
     rather than a text attribute, so it can't be reliably detected generically."""
@@ -501,7 +761,74 @@ def extract_pdf_with_annotations(uploaded_file):
     if annotation_lines:
         text += "\n\n--- Reviewer Comments (from PDF annotations) ---\n" + "\n".join(annotation_lines)
 
+    if describe_images:
+        image_bytes_list = []
+        for page in reader.pages:
+            try:
+                for img in page.images:
+                    image_bytes_list.append(img.data)
+            except Exception:
+                continue
+        if image_bytes_list:
+            with st.spinner(f"Reading {min(len(image_bytes_list), MAX_IMAGES_PER_DOC)} embedded image(s)..."):
+                descriptions = describe_images_with_vision(image_bytes_list, uploaded_file.name)
+            if descriptions:
+                desc_lines = [f"{i+1}. {d}" for i, d in enumerate(descriptions)]
+                text += "\n\n--- Images/Screenshots Found in Document (AI-described) ---\n" + "\n".join(desc_lines)
+
     return text
+
+
+def extract_pptx_with_formatting(uploaded_file, describe_images=True):
+    """Reads a .pptx slide-by-slide: slide title/body text (with bold/italic markdown
+    markers), speaker notes, and embedded images (screenshots often pasted into slides
+    to illustrate a workflow) described via Claude vision."""
+    prs = Presentation(uploaded_file)
+    lines = []
+    image_bytes_list = []
+
+    for slide_num, slide in enumerate(prs.slides, start=1):
+        slide_lines = [f"--- Slide {slide_num} ---"]
+        for shape in slide.shapes:
+            if shape.shape_type == 13:  # MSO_SHAPE_TYPE.PICTURE
+                try:
+                    image_bytes_list.append(shape.image.blob)
+                except Exception:
+                    pass
+                continue
+            if not shape.has_text_frame:
+                continue
+            for para in shape.text_frame.paragraphs:
+                rendered = []
+                for run in para.runs:
+                    t = run.text
+                    if not t:
+                        continue
+                    if run.font.bold:
+                        t = f"**{t}**"
+                    if run.font.italic:
+                        t = f"*{t}*"
+                    rendered.append(t)
+                line = "".join(rendered)
+                if line.strip():
+                    slide_lines.append(line)
+        if slide.has_notes_slide:
+            notes_text = slide.notes_slide.notes_text_frame.text
+            if notes_text.strip():
+                slide_lines.append(f"[Speaker notes: {notes_text.strip()}]")
+        if len(slide_lines) > 1:
+            lines.extend(slide_lines)
+
+    body_text = "\n".join(lines)
+
+    if describe_images and image_bytes_list:
+        with st.spinner(f"Reading {min(len(image_bytes_list), MAX_IMAGES_PER_DOC)} embedded image(s)..."):
+            descriptions = describe_images_with_vision(image_bytes_list, uploaded_file.name)
+        if descriptions:
+            desc_lines = [f"{i+1}. {d}" for i, d in enumerate(descriptions)]
+            body_text += "\n\n--- Images/Screenshots Found in Presentation (AI-described) ---\n" + "\n".join(desc_lines)
+
+    return body_text
 
 
 def extract_text_from_upload(uploaded_file):
@@ -515,6 +842,8 @@ def extract_text_from_upload(uploaded_file):
             return extract_pdf_with_annotations(uploaded_file)
         elif ext == "docx":
             return extract_docx_with_formatting(uploaded_file)
+        elif ext == "pptx":
+            return extract_pptx_with_formatting(uploaded_file)
         elif ext == "csv":
             df = pd.read_csv(uploaded_file)
             return df.to_string(index=False)
@@ -784,6 +1113,145 @@ def generate_stories(source_text):
     return result.get("stories", []) if result else []
 
 
+def generate_test_cases(stories):
+    """Builds test cases from already-generated user stories/acceptance criteria."""
+    story_lines = []
+    for s in stories:
+        story_lines.append(
+            f"Requirement: {s.get('requirement', '')}\n"
+            f"User Story: {s.get('user_story', '')}\n"
+            f"Acceptance Criteria: {s.get('acceptance_criteria', '')}"
+        )
+    source_text, was_truncated = truncate("\n\n".join(story_lines))
+    if was_truncated:
+        st.caption(f"Story list was long — using the first {MAX_CHARS:,} characters.")
+    system = (
+        "You are a senior QA/business analyst writing test cases from user stories and their "
+        "Gherkin acceptance criteria. For each story, write one or more test cases that verify "
+        "its acceptance criteria — cover the happy path and, where the acceptance criteria imply "
+        "one, at least one edge case. Only test what the acceptance criteria actually specify; "
+        "don't invent behavior."
+    )
+    user_prompt = f"User stories and acceptance criteria to derive test cases from:\n\n{source_text}"
+    result = call_structured(
+        system, user_prompt, "submit_test_cases",
+        "Submit the generated test cases.", TEST_CASE_SCHEMA, max_tokens=3000,
+    )
+    return result.get("test_cases", []) if result else []
+
+
+def generate_glossary(context_text):
+    context_text, was_truncated = truncate(context_text)
+    if was_truncated:
+        st.caption(f"Source content was long — using the first {MAX_CHARS:,} characters.")
+    system = (
+        "You are a senior business analyst building a business glossary. Read the source content "
+        "and extract domain-specific terms, acronyms, and system/product names that a new team "
+        "member would need explained — skip common English words. Ground every definition in how "
+        "the term is actually used in the source; don't invent definitions for terms not present."
+    ) + FORMATTING_GUIDANCE
+    user_prompt = f"Source content:\n\n{context_text if context_text.strip() else '(No source content provided.)'}"
+    result = call_structured(
+        system, user_prompt, "submit_glossary",
+        "Submit the extracted business glossary.", GLOSSARY_SCHEMA, max_tokens=2500,
+    )
+    return result.get("terms", []) if result else []
+
+
+def generate_prioritization(context_text):
+    context_text, was_truncated = truncate(context_text)
+    if was_truncated:
+        st.caption(f"Source content was long — using the first {MAX_CHARS:,} characters.")
+    system = (
+        "You are a senior business analyst facilitating MoSCoW prioritization. Read the source "
+        "content, identify each distinct requirement or need, and classify it as Must Have, Should "
+        "Have, Could Have, or Won't Have (this time), with a one-sentence rationale grounded in the "
+        "source content (e.g., stated urgency, dependency, regulatory need, or explicit stakeholder "
+        "priority). If priority isn't stated explicitly, use reasonable business judgment and say so "
+        "in the rationale."
+    ) + FORMATTING_GUIDANCE
+    user_prompt = f"Source content:\n\n{context_text if context_text.strip() else '(No source content provided.)'}"
+    result = call_structured(
+        system, user_prompt, "submit_prioritization",
+        "Submit the MoSCoW prioritization.", PRIORITIZATION_SCHEMA, max_tokens=2500,
+    )
+    return result.get("items", []) if result else []
+
+
+def generate_workshop_prep(project_description, focus_area, existing_context):
+    system = (
+        "You are a senior business analyst preparing for a stakeholder elicitation workshop. "
+        "Produce a tight, time-boxed agenda and a targeted list of open-ended elicitation "
+        "questions grouped by category (e.g., Scope, Process, Data, Constraints, Success Criteria). "
+        "Base the questions on what's already known from the project description/context — probe "
+        "specifically for what's missing or ambiguous, don't ask generic questions that the context "
+        "already answers."
+    )
+    user_prompt = (
+        f"Project description:\n{project_description or '(none provided)'}\n\n"
+        f"Workshop focus area:\n{focus_area or '(general requirements elicitation)'}\n\n"
+        f"Existing project context/documents (if any):\n{(existing_context or '(none)')[:5000]}"
+    )
+    return call_structured(
+        system, user_prompt, "submit_workshop_prep",
+        "Submit the workshop agenda and question list.", WORKSHOP_PREP_SCHEMA, max_tokens=2000,
+    )
+
+
+def build_rtm_rows(proj):
+    """Auto-builds Requirements Traceability Matrix rows from what's already been generated
+    elsewhere in the project (stories, test cases, MoSCoW prioritization) — no separate AI
+    call needed since the data already exists; this just links it together. Matching is by
+    the 'requirement' label the AI itself used, so it's exact-ish but not perfect — that's
+    why the RTM table stays editable, so the BA can fix/add links by hand."""
+    stories = proj.get("stories", [])
+    test_cases = proj.get("test_cases", [])
+    prioritization = proj.get("prioritization") or []
+    prio_by_req = {p.get("requirement", "").strip().lower(): p for p in prioritization}
+
+    rows = []
+    for s in stories:
+        req_label = s.get("requirement", "")
+        req_key = req_label.strip().lower()
+        related_tests = [
+            tc.get("test_id", "") for tc in test_cases
+            if req_key and req_key in tc.get("related_story", "").strip().lower()
+        ]
+        prio = prio_by_req.get(req_key)
+        rows.append({
+            "requirement": req_label,
+            "user_story": s.get("user_story", ""),
+            "test_cases": ", ".join(t for t in related_tests if t),
+            "priority": prio.get("moscow_category", "") if prio else "",
+            "status": "Drafted",
+        })
+    return rows
+
+
+def generate_change_impact(change_request_text, existing_context):
+    existing_context, was_truncated = truncate(existing_context)
+    if was_truncated:
+        st.caption(f"Existing project content was long — using the first {MAX_CHARS:,} characters.")
+    system = (
+        "You are a senior business analyst performing a change impact assessment. A change "
+        "request has come in against a project with existing requirements/stories. Identify "
+        "which existing requirements or stories it affects and how (conflicts with, extends, "
+        "invalidates, adds a dependency to, etc.), rate the overall impact level, and recommend "
+        "concrete next actions. Ground every affected item in something actually present in the "
+        "existing content — don't invent requirements that aren't there. If nothing in the "
+        "existing content is affected, say so and return an empty affected_requirements list."
+    )
+    user_prompt = (
+        f"Change request:\n{change_request_text}\n\n"
+        f"Existing project requirements/stories/documentation:\n"
+        f"{existing_context if existing_context.strip() else '(No existing project content available — assess the change request on its own.)'}"
+    )
+    return call_structured(
+        system, user_prompt, "submit_change_impact",
+        "Submit the change impact assessment.", CHANGE_IMPACT_SCHEMA, max_tokens=2000,
+    )
+
+
 def process_meeting(transcript_text):
     truncated_text, was_truncated = truncate(transcript_text)
     if was_truncated:
@@ -826,6 +1294,18 @@ def render_dashboard(proj, cp):
     open_gaps = len(gap_result.get("open_questions", [])) if gap_result else 0
     col4.metric("Open Gaps (latest analysis)", open_gaps)
 
+    col5, col6, col7, col8 = st.columns(4)
+    col5.metric("Test Cases Drafted", proj.get("test_cases_drafted", 0))
+    col6.metric("Glossary Terms", proj.get("glossary_terms_found", 0))
+    prioritized = proj.get("prioritization") or []
+    must_haves = len([i for i in prioritized if i.get("moscow_category") == "Must Have"])
+    col7.metric("Must-Have Requirements", must_haves)
+    col8.metric("Workshop Preps Drafted", 1 if proj.get("workshop_prep") else 0)
+
+    col9, col10, _, _ = st.columns(4)
+    col9.metric("RTM Rows Tracked", len(proj.get("rtm_rows", [])))
+    col10.metric("Change Requests Analyzed", len(proj.get("change_impact_history", [])))
+
     st.caption(
         "These metrics reflect activity for this project in your current browser session only. "
         "Tracking activity persistently across sessions/users would require a database backend."
@@ -852,12 +1332,13 @@ def ba_module():
         render_dashboard(proj, cp)
         return
 
-    tab0, tab1, tab2, tab3, tab4 = st.tabs([
+    tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Project & Documents",
         "Meeting Intelligence & Actionizer",
         "Elicitation Analysis & Gap Detector",
         "Documentation Generator",
         "Agile Story & Backlog Creator",
+        "Traceability & Change Impact",
     ])
 
     # --- Tab 0: Project & Documents ---
@@ -911,7 +1392,7 @@ def ba_module():
 
         repo_files = st.file_uploader(
             "Add documents to this project's repository",
-            type=['txt', 'pdf', 'docx', 'xlsx', 'csv'],
+            type=['txt', 'pdf', 'docx', 'pptx', 'xlsx', 'csv'],
             accept_multiple_files=True,
             key=f"repo_uploader_{cp}",
         )
@@ -997,6 +1478,58 @@ def ba_module():
                 "Document Repository above. Same end result, no credentials ever touch this app."
             )
 
+        st.markdown("---")
+        with st.expander("📖 Business Glossary", expanded=False):
+            st.caption(
+                "Scans this project's repository documents and pulls out domain terms, acronyms, "
+                "and system names with plain-language definitions — handy for onboarding new "
+                "team members or aligning stakeholders on vocabulary."
+            )
+            if not proj["documents"]:
+                st.info("Add documents to the repository above first.")
+            else:
+                all_repo_doc_names = [d["name"] for d in proj["documents"]]
+                glossary_doc_names = st.multiselect(
+                    "Build glossary from:", all_repo_doc_names, default=all_repo_doc_names, key=f"glossary_repo_select_{cp}",
+                )
+                if st.button("Build Glossary", key=f"build_glossary_btn_{cp}"):
+                    if not glossary_doc_names:
+                        st.warning("Select at least one document.")
+                    else:
+                        parts = []
+                        for name in glossary_doc_names:
+                            d = next((doc for doc in proj["documents"] if doc["name"] == name), None)
+                            if d:
+                                parts.append(f"--- {name} ---\n{d['text']}")
+                        with st.spinner("Extracting terms and definitions..."):
+                            terms = generate_glossary("\n\n".join(parts))
+                        if terms:
+                            proj["glossary"] = terms
+                            proj["glossary_terms_found"] = len(terms)
+
+                terms = proj.get("glossary", [])
+                if terms:
+                    gl_df = pd.DataFrame(terms)
+                    gl_df = gl_df.rename(columns={
+                        "term": "Term", "definition": "Definition", "source_context": "Source Context",
+                    })
+                    gl_df = gl_df.sort_values("Term")
+                    edited_gl_df = st.data_editor(gl_df, use_container_width=True, num_rows="dynamic", key=f"glossary_editor_{cp}")
+
+                    gdl1, gdl2 = st.columns(2)
+                    with gdl1:
+                        st.download_button(
+                            "Download as Excel (.xlsx)", build_xlsx_from_df("Glossary", edited_gl_df),
+                            file_name="business_glossary.xlsx", mime=XLSX_MIME, key=f"gl_xlsx_{cp}",
+                        )
+                    with gdl2:
+                        st.download_button(
+                            "Download as Word (.docx)", build_docx_table_from_df("Business Glossary", edited_gl_df),
+                            file_name="business_glossary.docx", mime=DOCX_MIME, key=f"gl_docx_{cp}",
+                        )
+                else:
+                    st.info("Build the glossary to see terms here.")
+
     # --- Tab 1: Meeting Intelligence ---
     with tab1:
         section_header(
@@ -1062,6 +1595,50 @@ def ba_module():
             SECTION_COLORS["elicitation"],
         )
 
+        with st.expander("🗓️ Prep for a Stakeholder Workshop", expanded=False):
+            st.caption("Get a time-boxed agenda and targeted questions before you walk into the room.")
+            focus_area = st.text_input(
+                "What's this workshop about?",
+                placeholder="e.g., Payments workflow requirements for the FinTech migration",
+                key=f"workshop_focus_{cp}",
+            )
+            if st.button("Generate Workshop Prep", key=f"workshop_prep_btn_{cp}"):
+                with st.spinner("Drafting agenda and questions..."):
+                    prep = generate_workshop_prep(
+                        proj.get("description", ""), focus_area, proj.get("extracted_text", ""),
+                    )
+                if prep:
+                    proj["workshop_prep"] = prep
+
+            prep = proj.get("workshop_prep")
+            if prep:
+                st.info(prep.get("objectives", ""))
+                st.markdown("**Agenda**")
+                agenda_df = pd.DataFrame(prep.get("agenda", []))
+                if not agenda_df.empty:
+                    agenda_df = agenda_df.rename(columns={
+                        "topic": "Topic", "duration_minutes": "Minutes", "purpose": "Purpose",
+                    })
+                    st.dataframe(agenda_df, use_container_width=True, hide_index=True)
+                st.markdown("**Questions to Ask**")
+                for cat in sorted(set(q.get("category", "Other") for q in prep.get("questions", []))):
+                    st.markdown(f"*{cat}*")
+                    for q in prep.get("questions", []):
+                        if q.get("category", "Other") == cat:
+                            st.write(f"- {q.get('question', '')}")
+                prep_md = f"# Workshop Prep — {focus_area or cp}\n\n{prep.get('objectives', '')}\n\n## Agenda\n"
+                for a in prep.get("agenda", []):
+                    prep_md += f"- **{a.get('topic', '')}** ({a.get('duration_minutes', '')} min) — {a.get('purpose', '')}\n"
+                prep_md += "\n## Questions\n"
+                for q in prep.get("questions", []):
+                    prep_md += f"- [{q.get('category', '')}] {q.get('question', '')}\n"
+                st.download_button(
+                    "Download Workshop Prep (.md)", prep_md,
+                    file_name="workshop_prep.md", mime="text/markdown", key=f"workshop_dl_{cp}",
+                )
+
+        st.markdown("---")
+
         repo_doc_names = [d["name"] for d in proj["documents"]]
         selected_repo_docs = []
         if repo_doc_names:
@@ -1072,7 +1649,7 @@ def ba_module():
 
         uploaded_file = st.file_uploader(
             "Upload a new Notes/Transcript or Document for this analysis:",
-            type=['txt', 'pdf', 'docx', 'xlsx', 'csv'], key=f"gap_uploader_{cp}",
+            type=['txt', 'pdf', 'docx', 'pptx', 'xlsx', 'csv'], key=f"gap_uploader_{cp}",
         )
         st.info(
             "Note on file intake: for proprietary formats (e.g., Apple Pages/Numbers, Visio, or "
@@ -1142,6 +1719,44 @@ def ba_module():
                 st.info("No significant gaps detected in this content.")
             for q in result.get("open_questions", []):
                 st.warning(f"**{q.get('type', 'Issue')}:** {q.get('issue', '')}\n\n*Why it matters:* {q.get('why_it_matters', '')}")
+
+        st.markdown("---")
+        with st.expander("📊 Prioritize Requirements (MoSCoW)", expanded=False):
+            st.caption(
+                "Scores the requirements in the content analyzed above as Must/Should/Could/Won't Have, "
+                "with a rationale for each."
+            )
+            if st.button("Prioritize Requirements", key=f"prioritize_btn_{cp}"):
+                source = proj.get("extracted_text", "")
+                if not source.strip():
+                    st.warning("Run 'Analyze for Gaps' above first (or upload/select documents) so there's content to prioritize.")
+                else:
+                    with st.spinner("Scoring requirements..."):
+                        items = generate_prioritization(source)
+                    if items:
+                        proj["prioritization"] = items
+
+            prioritized = proj.get("prioritization")
+            if prioritized:
+                pr_df = pd.DataFrame(prioritized)
+                pr_df = pr_df.rename(columns={
+                    "requirement": "Requirement", "moscow_category": "MoSCoW", "rationale": "Rationale",
+                })
+                category_order = {"Must Have": 0, "Should Have": 1, "Could Have": 2, "Won't Have": 3}
+                pr_df["_sort"] = pr_df["MoSCoW"].map(category_order).fillna(4)
+                pr_df = pr_df.sort_values("_sort").drop(columns="_sort")
+                st.dataframe(pr_df, use_container_width=True, hide_index=True)
+                dl1, dl2 = st.columns(2)
+                with dl1:
+                    st.download_button(
+                        "Download as Excel (.xlsx)", build_xlsx_from_df("Prioritization", pr_df),
+                        file_name="requirements_prioritization.xlsx", mime=XLSX_MIME, key=f"prio_xlsx_{cp}",
+                    )
+                with dl2:
+                    st.download_button(
+                        "Download as CSV (.csv)", pr_df.to_csv(index=False),
+                        file_name="requirements_prioritization.csv", mime="text/csv", key=f"prio_csv_{cp}",
+                    )
 
     # --- Tab 3: Documentation Generator ---
     with tab3:
@@ -1335,8 +1950,155 @@ def ba_module():
                     "Download as CSV — Jira/Azure DevOps import format (.csv)", edited_df.to_csv(index=False),
                     file_name="backlog_stories.csv", mime="text/csv",
                 )
+
+            st.markdown("---")
+            with st.expander("✅ Generate Test Cases from These Stories", expanded=False):
+                st.caption("Derives test cases straight from the acceptance criteria above — no re-typing.")
+                if st.button("Generate Test Cases", key=f"generate_tc_btn_{cp}"):
+                    with st.spinner("Writing test cases..."):
+                        test_cases = generate_test_cases(edited_df.to_dict("records"))
+                    if test_cases:
+                        proj["test_cases"] = test_cases
+                        proj["test_cases_drafted"] = proj.get("test_cases_drafted", 0) + len(test_cases)
+
+                test_cases = proj.get("test_cases", [])
+                if test_cases:
+                    tc_df = pd.DataFrame(test_cases)
+                    tc_df = tc_df.rename(columns={
+                        "test_id": "Test ID", "related_story": "Related Story", "scenario": "Scenario",
+                        "preconditions": "Preconditions", "steps": "Steps",
+                        "expected_result": "Expected Result", "priority": "Priority",
+                    })
+                    col_order = ["Test ID", "Related Story", "Scenario", "Preconditions", "Steps", "Expected Result", "Priority"]
+                    tc_df = tc_df.reindex(columns=col_order, fill_value="")
+                    edited_tc_df = st.data_editor(tc_df, use_container_width=True, num_rows="dynamic", key=f"tc_editor_{cp}")
+
+                    tdl1, tdl2 = st.columns(2)
+                    with tdl1:
+                        st.download_button(
+                            "Download as Excel (.xlsx)", build_xlsx_from_df("Test Cases", edited_tc_df),
+                            file_name="test_cases.xlsx", mime=XLSX_MIME, key=f"tc_xlsx_{cp}",
+                        )
+                    with tdl2:
+                        st.download_button(
+                            "Download as CSV (.csv)", edited_tc_df.to_csv(index=False),
+                            file_name="test_cases.csv", mime="text/csv", key=f"tc_csv_{cp}",
+                        )
+                else:
+                    st.info("Generate test cases to see them here.")
         else:
             st.info("Generate stories to see them here.")
+
+    # --- Tab 5: Traceability & Change Impact ---
+    with tab5:
+        section_header(
+            "Requirements Traceability Matrix",
+            "Auto-links Requirement → User Story → Test Case → Priority from what you've already generated. Edit freely.",
+            SECTION_COLORS["traceability"],
+        )
+
+        if not proj.get("stories"):
+            st.info("Generate user stories in the Agile Story & Backlog Creator tab first — the RTM builds from those.")
+        else:
+            if st.button("Build / Refresh RTM", key=f"build_rtm_btn_{cp}"):
+                proj["rtm_rows"] = build_rtm_rows(proj)
+
+            rtm_rows = proj.get("rtm_rows", [])
+            if not rtm_rows:
+                st.info("Click 'Build / Refresh RTM' to auto-populate from your stories, test cases, and prioritization.")
+            else:
+                rtm_df = pd.DataFrame(rtm_rows)
+                rtm_df = rtm_df.rename(columns={
+                    "requirement": "Requirement", "user_story": "User Story", "test_cases": "Test Case(s)",
+                    "priority": "Priority", "status": "Status",
+                })
+                col_order = ["Requirement", "User Story", "Test Case(s)", "Priority", "Status"]
+                rtm_df = rtm_df.reindex(columns=col_order, fill_value="")
+                st.caption(
+                    "Auto-matching is by requirement label, so it may miss or misalign a few links — "
+                    "add, remove, or fix rows directly in the table below before exporting."
+                )
+                edited_rtm_df = st.data_editor(rtm_df, use_container_width=True, num_rows="dynamic", key=f"rtm_editor_{cp}")
+
+                dl1, dl2 = st.columns(2)
+                with dl1:
+                    st.download_button(
+                        "Download as Excel (.xlsx)", build_xlsx_from_df("RTM", edited_rtm_df),
+                        file_name="requirements_traceability_matrix.xlsx", mime=XLSX_MIME, key=f"rtm_xlsx_{cp}",
+                    )
+                with dl2:
+                    st.download_button(
+                        "Download as Word (.docx)", build_docx_table_from_df("Requirements Traceability Matrix", edited_rtm_df),
+                        file_name="requirements_traceability_matrix.docx", mime=DOCX_MIME, key=f"rtm_docx_{cp}",
+                    )
+
+        st.markdown("---")
+        section_header(
+            "Change Request Impact Analyzer",
+            "Paste an incoming change request. AI checks it against this project's requirements/stories and flags what it touches.",
+            SECTION_COLORS["traceability"],
+        )
+
+        change_request_text = st.text_area(
+            "Describe the change request:",
+            placeholder=(
+                "e.g., Sponsor now wants multi-currency support added to the payments workflow "
+                "before launch, on top of the original single-currency scope."
+            ),
+            key=f"change_request_{cp}", height=100,
+        )
+
+        if st.button("Analyze Change Impact", key=f"analyze_change_btn_{cp}"):
+            if not change_request_text.strip():
+                st.warning("Describe the change request first.")
+            else:
+                existing_parts = []
+                if proj.get("extracted_text"):
+                    existing_parts.append(f"--- Elicitation Source Content ---\n{proj['extracted_text']}")
+                if proj.get("stories"):
+                    story_lines = "\n".join(
+                        f"- {s.get('requirement', '')}: {s.get('user_story', '')}" for s in proj["stories"]
+                    )
+                    existing_parts.append(f"--- Generated User Stories ---\n{story_lines}")
+                existing_context = "\n\n".join(existing_parts)
+
+                with st.spinner("Assessing change impact..."):
+                    impact = generate_change_impact(change_request_text, existing_context)
+                if impact:
+                    history = proj.get("change_impact_history", [])
+                    history.append({"request_text": change_request_text, "result": impact})
+                    proj["change_impact_history"] = history
+
+        change_history = proj.get("change_impact_history", [])
+        if change_history:
+            latest = change_history[-1]
+            impact = latest["result"]
+            level_color = {"Low": "info", "Medium": "warning", "High": "warning", "Critical": "error"}.get(
+                impact.get("impact_level", "Medium"), "info"
+            )
+            st.markdown(f"**Change request:** {latest['request_text']}")
+            getattr(st, level_color)(f"**Impact Level: {impact.get('impact_level', 'Unknown')}** — {impact.get('summary', '')}")
+
+            affected = impact.get("affected_requirements", [])
+            if affected:
+                st.markdown("**Affected Requirements/Stories**")
+                for a in affected:
+                    st.write(f"- **{a.get('requirement', '')}:** {a.get('impact_description', '')}")
+            else:
+                st.caption("No existing requirements/stories were flagged as affected.")
+
+            actions = impact.get("recommended_actions", [])
+            if actions:
+                st.markdown("**Recommended Next Actions**")
+                for act in actions:
+                    st.write(f"- {act}")
+
+            if len(change_history) > 1:
+                with st.expander(f"Previous change requests analyzed ({len(change_history) - 1})"):
+                    for prev in reversed(change_history[:-1]):
+                        st.markdown(f"**{prev['request_text']}**")
+                        st.caption(f"{prev['result'].get('impact_level', '')} — {prev['result'].get('summary', '')}")
+                        st.markdown("---")
 
 
 def pm_module():
@@ -1358,79 +2120,80 @@ def pgm_module():
     st.warning("PgM features (Interdependency Mapper, Benefit Realization Tracker) haven't been built yet — this module is still a placeholder.")
 
 
-# --- Main App Navigation ---
+if __name__ == "__main__":
+    # --- Main App Navigation ---
 
-if not check_access():
-    st.stop()
+    if not check_access():
+        st.stop()
 
-inject_theme()
-render_masthead()
-init_projects()
+    inject_theme()
+    render_masthead()
+    init_projects()
 
-# Apply any pending project switch (e.g. from creating a new project) BEFORE the
-# sidebar selectbox below is instantiated — Streamlit won't allow setting a widget's
-# session_state value after that widget has already rendered in the same run.
-if "pending_project_switch" in st.session_state:
-    _target = st.session_state.pop("pending_project_switch")
-    if _target in st.session_state["projects"]:
-        st.session_state["current_project"] = _target
+    # Apply any pending project switch (e.g. from creating a new project) BEFORE the
+    # sidebar selectbox below is instantiated — Streamlit won't allow setting a widget's
+    # session_state value after that widget has already rendered in the same run.
+    if "pending_project_switch" in st.session_state:
+        _target = st.session_state.pop("pending_project_switch")
+        if _target in st.session_state["projects"]:
+            st.session_state["current_project"] = _target
 
-st.sidebar.markdown(
-    f"<div style='font-size:1.6rem; font-weight:800; color:{ACCENT}; letter-spacing:0.5px;'>ScopeForge</div>"
-    f"<div style='font-size:0.8rem; color:{SIDEBAR_MUTED}; margin-bottom:0.8rem;'>Consulting Accelerator</div>",
-    unsafe_allow_html=True,
-)
+    st.sidebar.markdown(
+        f"<div style='font-size:1.6rem; font-weight:800; color:{ACCENT}; letter-spacing:0.5px;'>ScopeForge</div>"
+        f"<div style='font-size:0.8rem; color:{SIDEBAR_MUTED}; margin-bottom:0.8rem;'>Consulting Accelerator</div>",
+        unsafe_allow_html=True,
+    )
 
-st.sidebar.subheader("Active Project")
-project_names = list(st.session_state["projects"].keys())
-st.sidebar.selectbox("Select Project", project_names, key="current_project")
+    st.sidebar.subheader("Active Project")
+    project_names = list(st.session_state["projects"].keys())
+    st.sidebar.selectbox("Select Project", project_names, key="current_project")
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("Modules")
-role = st.sidebar.radio("Select Your Role", ["Business Analyst (BA)", "Project Manager (PM)", "Program Manager (PgM)"])
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Modules")
+    role = st.sidebar.radio("Select Your Role", ["Business Analyst (BA)", "Project Manager (PM)", "Program Manager (PgM)"])
 
-st.sidebar.markdown("---")
-st.sidebar.selectbox(
-    "AI Model", [DEFAULT_MODEL, FAST_MODEL], index=0, key="model",
-    help="Sonnet = best quality for analysis/drafting. Haiku = faster and cheaper, good for quick checks.",
-)
-if not get_api_key():
-    st.sidebar.error("No ANTHROPIC_API_KEY found in Secrets.")
-else:
-    st.sidebar.success("API key loaded.")
+    st.sidebar.markdown("---")
+    st.sidebar.selectbox(
+        "AI Model", [DEFAULT_MODEL, FAST_MODEL], index=0, key="model",
+        help="Sonnet = best quality for analysis/drafting. Haiku = faster and cheaper, good for quick checks.",
+    )
+    if not get_api_key():
+        st.sidebar.error("No ANTHROPIC_API_KEY found in Secrets.")
+    else:
+        st.sidebar.success("API key loaded.")
 
-st.sidebar.markdown("---")
+    st.sidebar.markdown("---")
 
-# --- Display Selected Module ---
-if role == "Business Analyst (BA)":
-    ba_module()
-elif role == "Project Manager (PM)":
-    pm_module()
-elif role == "Program Manager (PgM)":
-    pgm_module()
+    # --- Display Selected Module ---
+    if role == "Business Analyst (BA)":
+        ba_module()
+    elif role == "Project Manager (PM)":
+        pm_module()
+    elif role == "Program Manager (PgM)":
+        pgm_module()
 
-st.divider()
-section_header("ScopeBot (AI Assistant)", "Ask about requirements, JIRA sync, or BA best practices.", SECTION_COLORS["chat"])
+    st.divider()
+    section_header("ScopeBot (AI Assistant)", "Ask about requirements, JIRA sync, or BA best practices.", SECTION_COLORS["chat"])
 
-if "chat_history" not in st.session_state:
-    st.session_state["chat_history"] = []
+    if "chat_history" not in st.session_state:
+        st.session_state["chat_history"] = []
 
-for msg in st.session_state["chat_history"]:
-    st.chat_message(msg["role"]).write(msg["content"])
+    for msg in st.session_state["chat_history"]:
+        st.chat_message(msg["role"]).write(msg["content"])
 
-user_query = st.chat_input("Ask ScopeBot a question about requirements, JIRA sync, or best practices...")
+    user_query = st.chat_input("Ask ScopeBot a question about requirements, JIRA sync, or best practices...")
 
-if user_query:
-    st.session_state["chat_history"].append({"role": "user", "content": user_query})
-    st.chat_message("user").write(user_query)
+    if user_query:
+        st.session_state["chat_history"].append({"role": "user", "content": user_query})
+        st.chat_message("user").write(user_query)
 
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            reply = chat_with_bot(st.session_state["chat_history"])
-        if reply:
-            st.write(reply)
-        else:
-            reply = "Sorry, I couldn't process that — please try again."
-            st.write(reply)
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                reply = chat_with_bot(st.session_state["chat_history"])
+            if reply:
+                st.write(reply)
+            else:
+                reply = "Sorry, I couldn't process that — please try again."
+                st.write(reply)
 
-    st.session_state["chat_history"].append({"role": "assistant", "content": reply})
+        st.session_state["chat_history"].append({"role": "assistant", "content": reply})

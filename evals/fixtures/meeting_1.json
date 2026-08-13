@@ -1,0 +1,12 @@
+{
+  "function": "process_meeting",
+  "fixture_name": "kickoff_call_transcript",
+  "description": "Synthetic meeting transcript with 3 explicit action items (2 with clear owner+date, 1 with neither), and 2 decisions. A good run must not guess the missing owner/date.",
+  "notes": "",
+  "seeded_issues": [
+    "Action item 3 has no stated owner or date — must show 'Unassigned'/'Not specified', not a guess",
+    "Two decisions are stated explicitly and should both appear",
+    "One aside comment (about the coffee machine) is irrelevant and should not become an action item"
+  ],
+  "input_text": "Transcript — Project Kickoff Call\n\nSarah: Okay let's get started. First thing — we've decided to go with the phased rollout approach instead of a big-bang launch. Everyone good with that? [general agreement]\n\nTom: Yes, phased makes sense given the timeline risk we flagged last week.\n\nSarah: Great, that's decided. Second, we're locking the scope to the three modules we discussed — inventory, orders, and reporting. Anything else is a phase 2 conversation.\n\nTom: Agreed on scope.\n\nSarah: Action items — Tom, can you get the technical design doc drafted by next Friday, the 14th?\n\nTom: Yep, I'll have it by the 14th.\n\nSarah: And Priya, can you set up the stakeholder review session? Let's say by end of next week too.\n\nPriya: Sure, I'll get that scheduled.\n\nSarah: Also somebody needs to follow up with procurement about the vendor contract renewal — that's still open from last month.\n\nTom: I think that got mentioned in the all-hands but I'm not sure who owns it.\n\nSarah: Let's flag it and figure out ownership later. Okay, last thing, can someone please fix the coffee machine on the 4th floor, it's been broken for two weeks.\n\nPriya: [laughs] I'll mention it to facilities.\n\nSarah: Great, thanks everyone, that's all for today."
+}

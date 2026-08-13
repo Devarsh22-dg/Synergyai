@@ -1,0 +1,12 @@
+{
+  "function": "analyze_gaps",
+  "fixture_name": "payments_migration_sparse",
+  "description": "Synthetic project note with deliberately seeded gaps: no NFRs, one stakeholder conflict, one ambiguous term. A good run should catch all three.",
+  "notes": "",
+  "seeded_issues": [
+    "No performance/security/availability requirements stated anywhere",
+    "Sponsor wants 'fast rollout', Finance wants 'full UAT sign-off' before launch — these conflict on timeline",
+    "'Legacy system' is used without saying which system, twice"
+  ],
+  "input_text": "Project Note: Payments Platform Migration\n\nWe are replacing the legacy system with a new payments processor for retail transactions. The sponsor (VP Finance) wants a fast rollout in Q2 because the current vendor contract expires June 30.\n\nThe Finance team has stated that no release can go live without full UAT sign-off from their compliance reviewers, which historically takes 6-8 weeks.\n\nScope includes: card payments, ACH transfers, and refund processing. Out of scope: cryptocurrency payments (explicitly excluded by sponsor).\n\nThe new processor must integrate with the legacy system during a transition period of unspecified length. Data from the legacy system needs to be migrated, but the migration approach hasn't been decided.\n\nCustomer support has asked that refund processing keep the same turnaround time customers are used to today."
+}

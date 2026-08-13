@@ -1,0 +1,12 @@
+{
+  "function": "generate_stories",
+  "fixture_name": "expense_approval_requirements",
+  "description": "Synthetic requirements list with 4 distinct, clearly-stated needs. A good run produces one story per requirement, correctly formatted, with no invented scope.",
+  "notes": "",
+  "seeded_issues": [
+    "4 distinct requirements should yield roughly 4 stories, not more (no scope invention) or fewer (no dropped requirement)",
+    "Requirement 3 has an explicit role (Manager) that must appear as the story's <role>",
+    "Requirement 4 has an explicit threshold ($500) that must appear in the acceptance criteria"
+  ],
+  "input_text": "Requirements for Expense Approval Workflow:\n\n1. Employees must be able to submit an expense report with receipts attached (PDF or image).\n\n2. Once submitted, the expense report should notify the employee's direct manager for approval.\n\n3. The Manager must be able to approve or reject the expense report, with a required comment if rejecting.\n\n4. Any expense report over $500 requires a second approval from a Finance team member before it is marked approved."
+}
