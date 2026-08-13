@@ -60,7 +60,6 @@ DOC_TYPE_CODES = {
     "Use Cases": "Use_Cases",
     "As-Is / To-Be Process Document": "AsIs_ToBe",
 }
-TABULAR_DOC_TYPES = {"Data Dictionary", "As-Is / To-Be Process Document"}
 
 # --- Visual Theme ---
 # "Forge" palette: dark steel base, ember-orange accent, distinct hues per section.
@@ -1198,26 +1197,47 @@ def generate_workshop_prep(project_description, focus_area, existing_context):
     )
 
 
+def _label_overlap(a, b):
+    """Fuzzy match score (0-1) between two short AI-generated labels, by word overlap.
+    Three separate AI calls (stories, test cases, prioritization) each phrase the same
+    underlying requirement in their own words — exact/substring string matching misses
+    most real links, so this compares word sets instead of characters."""
+    a_words = set(re.findall(r"[a-z0-9]+", a.lower()))
+    b_words = set(re.findall(r"[a-z0-9]+", b.lower()))
+    if not a_words or not b_words:
+        return 0.0
+    return len(a_words & b_words) / min(len(a_words), len(b_words))
+
+
+RTM_MATCH_THRESHOLD = 0.4
+
+
 def build_rtm_rows(proj):
     """Auto-builds Requirements Traceability Matrix rows from what's already been generated
     elsewhere in the project (stories, test cases, MoSCoW prioritization) — no separate AI
-    call needed since the data already exists; this just links it together. Matching is by
-    the 'requirement' label the AI itself used, so it's exact-ish but not perfect — that's
-    why the RTM table stays editable, so the BA can fix/add links by hand."""
+    call needed since the data already exists; this just links it together. Matching is
+    fuzzy (word overlap, see _label_overlap) rather than exact, since the three source
+    lists come from independent AI calls that won't phrase a requirement identically. It's
+    still not perfect — that's why the RTM table stays editable, so the BA can fix/add
+    links by hand."""
     stories = proj.get("stories", [])
     test_cases = proj.get("test_cases", [])
     prioritization = proj.get("prioritization") or []
-    prio_by_req = {p.get("requirement", "").strip().lower(): p for p in prioritization}
 
     rows = []
     for s in stories:
         req_label = s.get("requirement", "")
-        req_key = req_label.strip().lower()
         related_tests = [
             tc.get("test_id", "") for tc in test_cases
-            if req_key and req_key in tc.get("related_story", "").strip().lower()
+            if req_label and _label_overlap(req_label, tc.get("related_story", "")) >= RTM_MATCH_THRESHOLD
         ]
-        prio = prio_by_req.get(req_key)
+        prio = max(
+            prioritization,
+            key=lambda p: _label_overlap(req_label, p.get("requirement", "")),
+            default=None,
+        )
+        if prio and _label_overlap(req_label, prio.get("requirement", "")) < RTM_MATCH_THRESHOLD:
+            prio = None
         rows.append({
             "requirement": req_label,
             "user_story": s.get("user_story", ""),
@@ -1302,7 +1322,7 @@ def render_dashboard(proj, cp):
     col7.metric("Must-Have Requirements", must_haves)
     col8.metric("Workshop Preps Drafted", 1 if proj.get("workshop_prep") else 0)
 
-    col9, col10, _, _ = st.columns(4)
+    col9, col10 = st.columns(2)
     col9.metric("RTM Rows Tracked", len(proj.get("rtm_rows", [])))
     col10.metric("Change Requests Analyzed", len(proj.get("change_impact_history", [])))
 
@@ -1577,12 +1597,12 @@ def ba_module():
                 with dl1:
                     st.download_button(
                         "Download as Excel (.xlsx)", build_xlsx_from_df("Action Items", action_df),
-                        file_name="meeting_action_items.xlsx", mime=XLSX_MIME,
+                        file_name="meeting_action_items.xlsx", mime=XLSX_MIME, key=f"meeting_xlsx_{cp}",
                     )
                 with dl2:
                     st.download_button(
                         "Download as CSV (.csv)", action_df.to_csv(index=False),
-                        file_name="meeting_action_items.csv", mime="text/csv",
+                        file_name="meeting_action_items.csv", mime="text/csv", key=f"meeting_csv_{cp}",
                     )
             else:
                 st.caption("No explicit action items were detected in this transcript.")
@@ -1831,11 +1851,12 @@ def ba_module():
                 with dl1:
                     st.download_button(
                         "Download as Word (.docx)", build_docx_from_markdown(shown_type, saved["text"]),
-                        file_name=f"{code}.docx", mime=DOCX_MIME,
+                        file_name=f"{code}.docx", mime=DOCX_MIME, key=f"doc_md_docx_{cp}",
                     )
                 with dl2:
                     st.download_button(
                         "Download as Markdown (.md)", saved["text"], file_name=f"{code}.md", mime="text/markdown",
+                        key=f"doc_md_md_{cp}",
                     )
 
             elif saved["kind"] == "data_dictionary":
@@ -1850,12 +1871,12 @@ def ba_module():
                 with dl1:
                     st.download_button(
                         "Download as Excel (.xlsx)", build_xlsx_from_df("Data Dictionary", df),
-                        file_name=f"{code}.xlsx", mime=XLSX_MIME,
+                        file_name=f"{code}.xlsx", mime=XLSX_MIME, key=f"doc_dd_xlsx_{cp}",
                     )
                 with dl2:
                     st.download_button(
                         "Download as Word (.docx)", build_docx_table_from_df("Data Dictionary", df),
-                        file_name=f"{code}.docx", mime=DOCX_MIME,
+                        file_name=f"{code}.docx", mime=DOCX_MIME, key=f"doc_dd_docx_{cp}",
                     )
 
             elif saved["kind"] == "asis_tobe":
@@ -1873,17 +1894,17 @@ def ba_module():
                 with dl1:
                     st.download_button(
                         "Download as Excel (.xlsx)", build_xlsx_from_df("As-Is To-Be", df),
-                        file_name=f"{code}.xlsx", mime=XLSX_MIME,
+                        file_name=f"{code}.xlsx", mime=XLSX_MIME, key=f"doc_at_xlsx_{cp}",
                     )
                 with dl2:
                     st.download_button(
                         "Download as Word (.docx)", build_docx_table_from_df("As-Is / To-Be Process Document", df),
-                        file_name=f"{code}.docx", mime=DOCX_MIME,
+                        file_name=f"{code}.docx", mime=DOCX_MIME, key=f"doc_at_docx_{cp}",
                     )
                 with dl3:
                     st.download_button(
                         "Download Visio Process Map (.xlsx)", build_visio_dataviz_xlsx(saved["rows"]),
-                        file_name=f"{code}_VisioDataVisualizer.xlsx", mime=XLSX_MIME,
+                        file_name=f"{code}_VisioDataVisualizer.xlsx", mime=XLSX_MIME, key=f"doc_at_visio_{cp}",
                     )
                 st.caption(
                     "The Visio Process Map file is formatted for Visio's built-in Data Visualizer "
@@ -1943,12 +1964,12 @@ def ba_module():
             with dl1:
                 st.download_button(
                     "Download as Excel (.xlsx)", build_xlsx_from_df("Backlog", edited_df),
-                    file_name="backlog_stories.xlsx", mime=XLSX_MIME,
+                    file_name="backlog_stories.xlsx", mime=XLSX_MIME, key=f"story_xlsx_{cp}",
                 )
             with dl2:
                 st.download_button(
                     "Download as CSV — Jira/Azure DevOps import format (.csv)", edited_df.to_csv(index=False),
-                    file_name="backlog_stories.csv", mime="text/csv",
+                    file_name="backlog_stories.csv", mime="text/csv", key=f"story_csv_{cp}",
                 )
 
             st.markdown("---")
