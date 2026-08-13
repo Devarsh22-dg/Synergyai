@@ -16,6 +16,11 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from datetime import datetime
 
+# auth is imported lazily inside check_access() rather than here — it pulls in
+# streamlit_authenticator, which needs a real Streamlit component runtime.
+# Importing it eagerly at module level would break headless imports of this
+# file (e.g. the eval harness in evals/, which never calls check_access()).
+
 # --- Configuration & Setup ---
 st.set_page_config(layout="wide", page_title="ScopeForge: Consulting Accelerator")
 
@@ -28,20 +33,20 @@ PROJECT_STATUSES = ["Planning", "In Progress", "On Hold", "Complete"]
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-# --- Access Control (placeholder — intentionally a no-op) ---
-# Per Devarsh's instruction: keep the app fully open until going live. This flag and
-# function are the hook point for that future work — once email-based login specs are
-# provided, implement the real check inside check_access() and flip AUTH_ENABLED to True.
-# Until then this always returns True and changes no behavior.
-AUTH_ENABLED = False
+# --- Access Control ---
+# Built-in username/password with email OTP verification at signup, then a
+# password login backed by a session cookie (see auth.py). MFA is a
+# deliberately separate, later phase — not implemented here.
+AUTH_ENABLED = True
 
 
 def check_access():
-    """Gate for future email-based login. Currently always allows access."""
+    """Gate for the whole app. Renders the login/signup UI and returns False
+    if nobody's logged in yet — callers should st.stop() in that case."""
     if not AUTH_ENABLED:
         return True
-    # TODO: implement real email-based login here once specs are provided.
-    return True
+    import auth  # see note above the (removed) top-level import
+    return auth.require_login()
 
 CHATBOT_SYSTEM_PROMPT = (
     "You are ScopeBot, an AI assistant embedded in a tool used by business analysts, "
@@ -2143,6 +2148,7 @@ def pgm_module():
 
 if __name__ == "__main__":
     # --- Main App Navigation ---
+    import auth  # local import — see note near check_access()
 
     if not check_access():
         st.stop()
@@ -2164,6 +2170,9 @@ if __name__ == "__main__":
         f"<div style='font-size:0.8rem; color:{SIDEBAR_MUTED}; margin-bottom:0.8rem;'>Consulting Accelerator</div>",
         unsafe_allow_html=True,
     )
+
+    auth.render_logout_control()
+    st.sidebar.markdown("---")
 
     st.sidebar.subheader("Active Project")
     project_names = list(st.session_state["projects"].keys())

@@ -52,6 +52,24 @@ def _cache_resource(func=None, **kwargs):
     return decorator
 
 
+class _Stub:
+    """Fallback for any streamlit attribute we haven't explicitly shimmed
+    above. Third-party packages (streamlit_authenticator's import chain, in
+    particular) reference streamlit decorators like @st.cache_data at class
+    -definition time, i.e. at IMPORT time, not just when actually run — so
+    this has to survive being used as a decorator, with or without
+    arguments, not just as a plain no-op function call."""
+
+    def __call__(self, *args, **kwargs):
+        if len(args) == 1 and not kwargs and callable(args[0]):
+            return args[0]  # used as @st.something directly on a function/class
+        return self  # used as @st.something(...) -> the returned decorator
+
+
+def _module_getattr(name):
+    return _Stub()
+
+
 shim = types.ModuleType("streamlit")
 shim.set_page_config = _noop
 shim.error = _noop
@@ -66,3 +84,16 @@ shim.stop = lambda: (_ for _ in ()).throw(SystemExit("st.stop() called during ev
 shim.cache_resource = _cache_resource
 shim.session_state = _SessionState()
 shim.secrets = types.SimpleNamespace(get=lambda *a, **k: None)
+
+# streamlit_authenticator does `import streamlit.components.v1 as components` at its
+# own module level, which needs a real submodule structure (not just attributes on a
+# flat fake module) to resolve. auth.py only imports classes from it during a headless
+# eval run — never instantiates/calls them — so a no-op stand-in is enough here.
+_components_v1 = types.ModuleType("streamlit.components.v1")
+_components_v1.html = _noop
+_components_v1.declare_component = lambda *a, **k: _noop
+_components = types.ModuleType("streamlit.components")
+_components.v1 = _components_v1
+shim.components = _components
+
+shim.__getattr__ = _module_getattr  # PEP 562 — catches anything not explicitly defined above

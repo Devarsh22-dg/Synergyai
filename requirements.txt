@@ -8,3 +8,4 @@ openpyxl        # For reading/writing .xlsx files (Excel)
 pypdf           # For reading .pdf files, their comment annotations, and embedded images
 requests        # For fetching public webpage content (Source URLs)
 beautifulsoup4  # For parsing fetched webpage HTML into clean text
+streamlit-authenticator  # Login: password hashing + session cookie handling

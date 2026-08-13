@@ -63,6 +63,11 @@ def load_app():
     sys.path.insert(0, str(REPO_ROOT))
     from streamlit_shim import shim
     sys.modules["streamlit"] = shim
+    # Submodules need their own sys.modules entries — Python resolves
+    # `import streamlit.components.v1` by dotted-path lookup, not just
+    # attribute access on the parent module object.
+    sys.modules["streamlit.components"] = shim.components
+    sys.modules["streamlit.components.v1"] = shim.components.v1
     import synergyai_app  # noqa: E402
     return synergyai_app
 

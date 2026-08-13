@@ -1,0 +1,13 @@
+# Local user database — contains real usernames/emails/password hashes.
+# Never commit this. Also a reminder that SQLite here is a dev-only choice:
+# see db.py's module docstring for why this doesn't survive on Streamlit
+# Community Cloud and needs to move to a real backend before production use.
+scopeforge.db
+*.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Streamlit local secrets (never commit real credentials)
+.streamlit/secrets.toml
