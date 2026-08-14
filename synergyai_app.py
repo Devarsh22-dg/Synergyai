@@ -866,19 +866,33 @@ def extract_text_from_upload(uploaded_file):
         return ""
 
 
+MAX_FETCH_URL_BYTES = 5 * 1024 * 1024  # cap page size before it's pulled into memory/parsed
+
+
 def fetch_url_text(url, timeout=10):
     """Fetches a public webpage and returns its visible text plus a best-guess title.
     Only handles publicly-accessible pages — see the 'Pages that require a login' note
     in the Project & Documents tab for why authenticated fetching isn't implemented."""
     headers = {"User-Agent": "Mozilla/5.0 (compatible; ScopeForge-DocBot/1.0)"}
-    resp = requests.get(url, headers=headers, timeout=timeout)
+    resp = requests.get(url, headers=headers, timeout=timeout, stream=True)
     resp.raise_for_status()
+
+    chunks = []
+    total = 0
+    for chunk in resp.iter_content(chunk_size=65536):
+        total += len(chunk)
+        if total > MAX_FETCH_URL_BYTES:
+            resp.close()
+            raise ValueError(f"This page is larger than {MAX_FETCH_URL_BYTES // (1024*1024)}MB — too large to fetch.")
+        chunks.append(chunk)
+    resp.encoding = resp.encoding or "utf-8"
+    body = b"".join(chunks).decode(resp.encoding, errors="ignore")
 
     content_type = resp.headers.get("Content-Type", "").lower()
     if "text/plain" in content_type:
-        return resp.text, url
+        return body, url
 
-    soup = BeautifulSoup(resp.text, "html.parser")
+    soup = BeautifulSoup(body, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     title = soup.title.string.strip() if (soup.title and soup.title.string) else url
@@ -1374,9 +1388,10 @@ def ba_module():
         with col1:
             proj["client"] = st.text_input("Client / Stakeholder", value=proj.get("client", ""), key=f"client_{cp}")
         with col2:
+            current_status = proj.get("status", "Planning")
             proj["status"] = st.selectbox(
                 "Status", PROJECT_STATUSES,
-                index=PROJECT_STATUSES.index(proj.get("status", "Planning")),
+                index=PROJECT_STATUSES.index(current_status) if current_status in PROJECT_STATUSES else 0,
                 key=f"status_{cp}",
             )
 
@@ -1487,6 +1502,8 @@ def ba_module():
                             st.error(f"Couldn't fetch this URL ({code or 'HTTP error'}).")
                     except requests.exceptions.RequestException as e:
                         st.error(f"Couldn't reach this URL: {e}")
+                    except ValueError as e:
+                        st.error(str(e))
 
         with st.expander("Pages that require a login"):
             st.markdown(
