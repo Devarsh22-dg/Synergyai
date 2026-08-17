@@ -835,9 +835,15 @@ def extract_pptx_with_formatting(uploaded_file, describe_images=True):
     return body_text
 
 
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # cap uploaded files before they're parsed/sent to vision
+
+
 def extract_text_from_upload(uploaded_file):
     name = uploaded_file.name
     ext = name.split(".")[-1].lower()
+    if uploaded_file.size > MAX_UPLOAD_BYTES:
+        st.error(f"This file is larger than {MAX_UPLOAD_BYTES // (1024*1024)}MB — too large to process.")
+        return ""
     uploaded_file.seek(0)
     try:
         if ext == "txt":
@@ -886,7 +892,10 @@ def fetch_url_text(url, timeout=10):
             raise ValueError(f"This page is larger than {MAX_FETCH_URL_BYTES // (1024*1024)}MB — too large to fetch.")
         chunks.append(chunk)
     resp.encoding = resp.encoding or "utf-8"
-    body = b"".join(chunks).decode(resp.encoding, errors="ignore")
+    try:
+        body = b"".join(chunks).decode(resp.encoding, errors="ignore")
+    except (LookupError, TypeError):
+        body = b"".join(chunks).decode("utf-8", errors="ignore")
 
     content_type = resp.headers.get("Content-Type", "").lower()
     if "text/plain" in content_type:
@@ -963,7 +972,7 @@ def build_docx_from_markdown(title, markdown_text):
         elif re.match(r"^\d+\.\s+", line):
             doc.add_paragraph(re.sub(r"^\d+\.\s+", "", line), style="List Number")
         else:
-            doc.add_paragraph(line.replace("**", "").replace("*", ""))
+            doc.add_paragraph(line.replace("**", "").replace("*", "").replace("~~", ""))
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()
