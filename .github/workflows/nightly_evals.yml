@@ -23,6 +23,30 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Diagnose the IPv4-forcing fix directly on this runner (temporary)
+        run: |
+          python3 -c "
+          import httpx
+          # Exact construction used in get_client() — verifying ON THE ACTUAL
+          # runner where the bug lives, not just that the syntax runs somewhere.
+          client = httpx.Client(transport=httpx.HTTPTransport(local_address='0.0.0.0'))
+          try:
+              r = client.get('https://api.anthropic.com/', timeout=10)
+              print(f'httpx.Client with local_address=0.0.0.0: HTTP {r.status_code}')
+          except Exception as e:
+              print(f'httpx.Client with local_address=0.0.0.0: FAILED - {type(e).__name__}: {e}')
+
+          import anthropic
+          try:
+              c = anthropic.Anthropic(api_key='sk-ant-placeholder-not-real', http_client=client)
+              print('anthropic.Anthropic(http_client=...) constructed OK, attempting a real call...')
+              c.messages.create(model='claude-sonnet-4-6', max_tokens=10, messages=[{'role':'user','content':'hi'}])
+          except anthropic.APIConnectionError as e:
+              print(f'anthropic client: CONNECTION FAILED - {e}')
+          except Exception as e:
+              print(f'anthropic client: reached the server (expected auth error with placeholder key) - {type(e).__name__}: {e}')
+          "
+
       - name: Run eval harness
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
