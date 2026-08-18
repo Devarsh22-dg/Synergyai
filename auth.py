@@ -1,18 +1,17 @@
-"""Sign-up (with email OTP verification) and login for ScopeForge.
+"""Sign-up and login for ScopeForge.
 
 Design:
   - Passwords are hashed with streamlit_authenticator's Hasher (bcrypt) —
     never stored or compared in plaintext.
-  - A new account is inactive (email_verified=0) until the user enters the
-    6-digit code emailed to them at signup. Only verified accounts can log in.
+  - Accounts are activated immediately on signup — email OTP verification is
+    turned OFF for now (was removed 2026-08-17; see otp_email.py, which is
+    kept in place but unused, in case it's turned back on later).
   - Login itself (credential check + session cookie) is handled by
     streamlit_authenticator's Authenticate class — battle-tested session/
     cookie handling rather than hand-rolled.
   - MFA is intentionally NOT implemented here. That's a deliberately separate,
     later phase (before PM-tool integration), not bundled into this one.
 
-Required secrets for signup email to actually send (see otp_email.py):
-    SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM_EMAIL
 Optional secret to pin the auth cookie's signing key across restarts
 (recommended in production so logins don't get invalidated on every deploy):
     AUTH_COOKIE_KEY
@@ -24,7 +23,6 @@ import streamlit as st
 import streamlit_authenticator as stauth
 
 import db
-import otp_email
 
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,20}$")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -108,13 +106,10 @@ def _render_signup():
     password_hash = stauth.Hasher.hash(password)
 
     if existing_by_email:
-        # An unverified, abandoned signup for this email already exists — most
-        # likely the first verification email never arrived. Resume it instead
-        # of permanently blocking this email address: update the username/
-        # password in case they changed, and send a fresh code below.
+        # Handles any pre-existing unverified row from before OTP verification
+        # was turned off, or a create_user() that partially failed previously.
         user_id = existing_by_email["id"]
         db.update_pending_user(user_id, username, password_hash)
-        st.info("Resuming your previous signup for this email — sending a new code.")
     else:
         try:
             user_id = db.create_user(username, email, password_hash)
@@ -122,72 +117,8 @@ def _render_signup():
             st.error(f"Couldn't create account: {e}")
             return
 
-    code = otp_email.generate_otp()
-    db.create_otp(user_id, otp_email.hash_otp(code), otp_email.SIGNUP_PURPOSE, otp_email.otp_expiry_iso())
-    try:
-        otp_email.send_otp_email(email, code, _get_secret)
-    except Exception as e:
-        st.warning(
-            f"Account created, but the verification email couldn't be sent ({e}). "
-            "Ask your admin to configure SMTP secrets, then use 'Resend Code' below once fixed."
-        )
-
-    st.session_state["pending_signup_user_id"] = user_id
-    st.session_state["pending_signup_email"] = email
-    st.rerun()
-
-
-def _render_otp_verify():
-    """Returns True if it rendered the verification screen (i.e. caller should
-    stop here), False if there's no pending signup to verify."""
-    user_id = st.session_state.get("pending_signup_user_id")
-    email = st.session_state.get("pending_signup_email")
-    if not user_id:
-        return False
-
-    st.subheader("Verify your email")
-    st.caption(f"Enter the 6-digit code sent to {email}. It expires in {otp_email.OTP_TTL_MINUTES} minutes.")
-    with st.form("otp_form"):
-        code = st.text_input("Verification code", max_chars=6, key="otp_code_input")
-        col1, col2 = st.columns(2)
-        with col1:
-            verify_clicked = st.form_submit_button("Verify")
-        with col2:
-            resend_clicked = st.form_submit_button("Resend Code")
-
-    if resend_clicked:
-        new_code = otp_email.generate_otp()
-        db.create_otp(user_id, otp_email.hash_otp(new_code), otp_email.SIGNUP_PURPOSE, otp_email.otp_expiry_iso())
-        try:
-            otp_email.send_otp_email(email, new_code, _get_secret)
-            st.success("New code sent.")
-        except Exception as e:
-            st.error(f"Couldn't send email: {e}")
-        return True
-
-    if verify_clicked:
-        otp_row = db.get_latest_otp(user_id, otp_email.SIGNUP_PURPOSE)
-        if not otp_row:
-            st.error("No pending code found — click 'Resend Code'.")
-        elif otp_email.is_expired(otp_row["expires_at"]):
-            st.error("That code expired — click 'Resend Code'.")
-        elif otp_email.hash_otp((code or "").strip()) != otp_row["code_hash"]:
-            st.error("Incorrect code.")
-        else:
-            db.consume_otp(otp_row["id"])
-            db.mark_email_verified(user_id)
-            st.session_state.pop("pending_signup_user_id", None)
-            st.session_state.pop("pending_signup_email", None)
-            st.success("Email verified! Log in below.")
-            st.rerun()
-
-    if st.button("Cancel and start over", key="otp_cancel"):
-        db.delete_unverified_user(user_id)
-        st.session_state.pop("pending_signup_user_id", None)
-        st.session_state.pop("pending_signup_email", None)
-        st.rerun()
-
-    return True
+    db.mark_email_verified(user_id)
+    st.success("Account created — switch to the Log In tab and sign in with your new credentials.")
 
 
 def require_login():
@@ -200,9 +131,6 @@ def require_login():
         return True
 
     st.markdown("## Welcome to ScopeForge")
-
-    if _render_otp_verify():
-        return False
 
     tab_login, tab_signup = st.tabs(["Log In", "Sign Up"])
 
