@@ -167,8 +167,17 @@ def update_learned(function, fixture_name, streak_rows):
         f.write(entry)
 
 
-def write_report(results):
+def write_report(results, fixtures_attempted):
     lines = [f"# Eval Report — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n"]
+    if fixtures_attempted and not results:
+        lines.append(
+            "⚠️ **0 of "
+            f"{fixtures_attempted} fixture(s) produced a score — every judge/generation call "
+            "failed.** This is NOT the same as passing; check the workflow log for the actual "
+            "API error (look for `[st.error]` lines)."
+        )
+        REPORT_FILE.write_text("\n".join(lines) + "\n")
+        return
     lines.append("| Function | Fixture | Score | Missed Seeded Issues | Flag |")
     lines.append("|---|---|---|---|---|")
     any_flags = False
@@ -182,7 +191,9 @@ def write_report(results):
             any_flags = True
         missed = "; ".join(r.get("missed_seeded_issues", [])) or "—"
         lines.append(f"| {r['function']} | {r['fixture']} | {r['overall_score']} | {missed} | {flag} |")
-    if not any_flags:
+    if len(results) < fixtures_attempted:
+        lines.append(f"\n⚠️ {fixtures_attempted - len(results)} of {fixtures_attempted} fixture(s) failed to produce a score at all (see log).")
+    elif not any_flags:
         lines.append("\nAll fixtures at or above threshold tonight.")
     REPORT_FILE.write_text("\n".join(lines) + "\n")
 
@@ -238,7 +249,11 @@ def main():
         results.append(row)
         print(f"  Score: {row['overall_score']} — {row['summary']}")
 
-    write_report(results)
+    write_report(results, len(fixtures))
+    if fixtures and not results:
+        # Every fixture failed to produce a score — that's a broken run, not
+        # a clean one. Exit non-zero so the Action shows red instead of green.
+        sys.exit(1)
     print(f"\nReport written to {REPORT_FILE}")
 
 

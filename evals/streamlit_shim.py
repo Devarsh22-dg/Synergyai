@@ -37,6 +37,15 @@ def _noop(*args, **kwargs):
     return None
 
 
+def _print_error(msg="", *args, **kwargs):
+    # The real st.error renders visibly in the app UI. In headless/eval mode
+    # there's no UI, so without this, call_structured()'s "AI request failed"
+    # messages vanish silently — which is exactly what made a real API
+    # failure look like "0 fixtures evaluated, nothing to report" instead of
+    # a visible error. Print instead of no-op so it shows up in the log.
+    print(f"[st.error] {msg}")
+
+
 def _spinner(*args, **kwargs):
     return _NoopContextManager()
 
@@ -72,8 +81,8 @@ def _module_getattr(name):
 
 shim = types.ModuleType("streamlit")
 shim.set_page_config = _noop
-shim.error = _noop
-shim.warning = _noop
+shim.error = _print_error
+shim.warning = _print_error
 shim.info = _noop
 shim.success = _noop
 shim.caption = _noop
