@@ -3,9 +3,8 @@
 Design:
   - Passwords are hashed with streamlit_authenticator's Hasher (bcrypt) —
     never stored or compared in plaintext.
-  - Accounts are activated immediately on signup — email OTP verification is
-    turned OFF for now (was removed 2026-08-17; see otp_email.py, which is
-    kept in place but unused, in case it's turned back on later).
+  - Accounts are activated immediately on signup. There is no email
+    verification step — it was built, then removed, on 2026-08-17.
   - Login itself (credential check + session cookie) is handled by
     streamlit_authenticator's Authenticate class — battle-tested session/
     cookie handling rather than hand-rolled.

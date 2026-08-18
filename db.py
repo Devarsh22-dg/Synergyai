@@ -1,4 +1,4 @@
-"""Storage abstraction for ScopeForge's user accounts and OTP codes.
+"""Storage abstraction for ScopeForge's user accounts.
 
 The rest of the app (auth.py) only calls the functions below — it never
 touches SQL or a file path directly. That boundary is deliberate: today this
@@ -11,11 +11,9 @@ get_storage() at it. Nothing in auth.py or synergyai_app.py should need to
 change.
 
 Schema (users):
-    id, username, email, password_hash, email_verified (0/1),
+    id, username, email, password_hash, email_verified (0/1, currently always
+    set true at signup — email OTP verification was removed 2026-08-17),
     mfa_enabled (0/1, reserved for a future phase), created_at
-
-Schema (otp_codes):
-    id, user_id, code_hash, purpose, expires_at, consumed (0/1), created_at
 """
 import os
 import sqlite3
@@ -32,16 +30,6 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     email_verified INTEGER NOT NULL DEFAULT 0,
     mfa_enabled INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS otp_codes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL REFERENCES users(id),
-    code_hash TEXT NOT NULL,
-    purpose TEXT NOT NULL,
-    expires_at TEXT NOT NULL,
-    consumed INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
 """
@@ -83,11 +71,11 @@ def create_user(username, email, password_hash):
 
 
 def update_pending_user(user_id, username, password_hash):
-    """Updates an unverified account's username/password — used when someone
-    re-submits the signup form for an email that already has an unverified,
-    abandoned account (e.g. the first OTP email never arrived). Only ever
-    call this on a row where email_verified = 0; verified accounts must not
-    be silently modified this way."""
+    """Updates an unverified account's username/password — handles a
+    pre-existing unverified row left over from before email OTP verification
+    was removed, or a create_user() that partially failed previously. Only
+    ever call this on a row where email_verified = 0; verified accounts must
+    not be silently modified this way."""
     with _connect() as conn:
         conn.execute(
             "UPDATE users SET username = ?, password_hash = ? WHERE id = ? AND email_verified = 0",
@@ -112,42 +100,8 @@ def mark_email_verified(user_id):
         conn.execute("UPDATE users SET email_verified = 1 WHERE id = ?", (user_id,))
 
 
-def delete_unverified_user(user_id):
-    """Used to clean up an abandoned signup (e.g. OTP expired and never verified)
-    so the username/email become available again."""
-    with _connect() as conn:
-        conn.execute("DELETE FROM otp_codes WHERE user_id = ?", (user_id,))
-        conn.execute("DELETE FROM users WHERE id = ? AND email_verified = 0", (user_id,))
-
-
 def get_all_verified_users():
     """Used to build the credentials dict streamlit-authenticator needs at login time."""
     with _connect() as conn:
         rows = conn.execute("SELECT * FROM users WHERE email_verified = 1").fetchall()
         return [dict(r) for r in rows]
-
-
-# --- OTP codes ---
-
-def create_otp(user_id, code_hash, purpose, expires_at_iso):
-    with _connect() as conn:
-        conn.execute(
-            "INSERT INTO otp_codes (user_id, code_hash, purpose, expires_at, consumed, created_at) "
-            "VALUES (?, ?, ?, ?, 0, ?)",
-            (user_id, code_hash, purpose, expires_at_iso, _now_iso()),
-        )
-
-
-def get_latest_otp(user_id, purpose):
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT * FROM otp_codes WHERE user_id = ? AND purpose = ? AND consumed = 0 "
-            "ORDER BY id DESC LIMIT 1",
-            (user_id, purpose),
-        ).fetchone()
-        return dict(row) if row else None
-
-
-def consume_otp(otp_id):
-    with _connect() as conn:
-        conn.execute("UPDATE otp_codes SET consumed = 1 WHERE id = ?", (otp_id,))

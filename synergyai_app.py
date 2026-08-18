@@ -34,8 +34,8 @@ DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.docu
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 # --- Access Control ---
-# Built-in username/password with email OTP verification at signup, then a
-# password login backed by a session cookie (see auth.py). MFA is a
+# Built-in username/password, session-cookie login (see auth.py). No email
+# verification step — accounts activate immediately on signup. MFA is a
 # deliberately separate, later phase — not implemented here.
 AUTH_ENABLED = True
 
