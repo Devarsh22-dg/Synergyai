@@ -23,33 +23,21 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Isolate real-key vs call-path vs flakiness (temporary)
+      - name: Check the secret's shape without ever printing it (temporary)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           python3 -c "
-          import os, httpx, anthropic
-
-          real_key = os.environ['ANTHROPIC_API_KEY']
-
-          def try_call(label, key, use_local_address, attempts=3):
-              for i in range(attempts):
-                  kwargs = {}
-                  if use_local_address:
-                      kwargs['http_client'] = httpx.Client(transport=httpx.HTTPTransport(local_address='0.0.0.0'))
-                  c = anthropic.Anthropic(api_key=key, **kwargs)
-                  try:
-                      c.messages.create(model='claude-sonnet-4-6', max_tokens=10, messages=[{'role':'user','content':'hi'}])
-                      print(f'{label} attempt {i+1}: SUCCESS (real response, unexpected with fake key)')
-                  except anthropic.APIConnectionError as e:
-                      print(f'{label} attempt {i+1}: CONNECTION FAILED - {e}')
-                  except anthropic.AuthenticationError as e:
-                      print(f'{label} attempt {i+1}: reached server, auth error (expected if key is fake) - {e}')
-                  except Exception as e:
-                      print(f'{label} attempt {i+1}: reached server, other error - {type(e).__name__}: {e}')
-
-          try_call('B: REAL key + local_address forced, standalone', real_key, True)
-          try_call('C: REAL key + no local_address (baseline)', real_key, False, attempts=1)
+          import os
+          key = os.environ['ANTHROPIC_API_KEY']
+          print(f'length: {len(key)}')
+          print(f'has leading/trailing whitespace: {key != key.strip()}')
+          print(f'contains newline: {chr(10) in key!r}, contains carriage return: {chr(13) in key!r}')
+          print(f'contains space: {chr(32) in key!r}')
+          print(f'starts with sk-ant-: {key.startswith(\"sk-ant-\")}')
+          print(f'is pure ASCII: {key.isascii()}')
+          print(f'first 7 chars: {key[:7]!r}')
+          print(f'last 3 chars (as escaped repr, to catch trailing whitespace/newlines): {key[-3:]!r}')
           "
 
       - name: Run eval harness
