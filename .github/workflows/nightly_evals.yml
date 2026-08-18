@@ -23,28 +23,30 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Diagnose the IPv4-forcing fix directly on this runner (temporary)
+      - name: Diagnose the REAL get_client() through the REAL import path (temporary)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           python3 -c "
-          import httpx
-          # Exact construction used in get_client() — verifying ON THE ACTUAL
-          # runner where the bug lives, not just that the syntax runs somewhere.
-          client = httpx.Client(transport=httpx.HTTPTransport(local_address='0.0.0.0'))
-          try:
-              r = client.get('https://api.anthropic.com/', timeout=10)
-              print(f'httpx.Client with local_address=0.0.0.0: HTTP {r.status_code}')
-          except Exception as e:
-              print(f'httpx.Client with local_address=0.0.0.0: FAILED - {type(e).__name__}: {e}')
+          import sys
+          sys.path.insert(0, 'evals')
+          sys.path.insert(0, '.')
+          from streamlit_shim import shim
+          sys.modules['streamlit'] = shim
+          sys.modules['streamlit.components'] = shim.components
+          sys.modules['streamlit.components.v1'] = shim.components.v1
+          import synergyai_app as app
 
-          import anthropic
+          client = app.get_client()
+          print(f'get_client() returned: {type(client)}')
+          print(f'client._client type: {type(client._client)}')
+          print(f'client._client transport: {client._client._transport!r}')
+
           try:
-              c = anthropic.Anthropic(api_key='sk-ant-placeholder-not-real', http_client=client)
-              print('anthropic.Anthropic(http_client=...) constructed OK, attempting a real call...')
-              c.messages.create(model='claude-sonnet-4-6', max_tokens=10, messages=[{'role':'user','content':'hi'}])
-          except anthropic.APIConnectionError as e:
-              print(f'anthropic client: CONNECTION FAILED - {e}')
+              resp = client.messages.create(model='claude-sonnet-4-6', max_tokens=10, messages=[{'role':'user','content':'hi'}])
+              print(f'REAL get_client() call: SUCCESS - {resp.content}')
           except Exception as e:
-              print(f'anthropic client: reached the server (expected auth error with placeholder key) - {type(e).__name__}: {e}')
+              print(f'REAL get_client() call: FAILED - {type(e).__name__}: {e}')
           "
 
       - name: Run eval harness
