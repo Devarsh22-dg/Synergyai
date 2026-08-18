@@ -23,6 +23,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Diagnose connectivity to Anthropic's API (temporary)
+        run: |
+          echo "--- DNS resolution ---"
+          getent hosts api.anthropic.com || echo "DNS FAILED"
+          echo "--- curl verbose (no auth needed, just connectivity/TLS) ---"
+          curl -v --max-time 15 https://api.anthropic.com/ 2>&1 | tail -40 || echo "CURL FAILED, exit $?"
+
       - name: Run eval harness
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
