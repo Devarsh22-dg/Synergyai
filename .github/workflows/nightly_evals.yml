@@ -23,25 +23,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Diagnose connectivity to Anthropic's API (temporary)
-        run: |
-          echo "--- DNS resolution (all records) ---"
-          getent ahosts api.anthropic.com || echo "DNS FAILED"
-          echo "--- curl forced IPv4 ---"
-          curl -4 -sS --max-time 10 -o /dev/null -w "IPv4 curl: HTTP %{http_code}\n" https://api.anthropic.com/ || echo "IPv4 curl FAILED, exit $?"
-          echo "--- curl forced IPv6 ---"
-          curl -6 -sS --max-time 10 -o /dev/null -w "IPv6 curl: HTTP %{http_code}\n" https://api.anthropic.com/ || echo "IPv6 curl FAILED, exit $?"
-          echo "--- python httpx (same library the anthropic SDK uses) ---"
-          python3 -c "
-          import httpx
-          for name, transport_kwargs in [('default', {}), ('force ipv4', {'local_address': '0.0.0.0'})]:
-              try:
-                  r = httpx.get('https://api.anthropic.com/', timeout=10, transport=httpx.HTTPTransport(**transport_kwargs))
-                  print(f'{name}: HTTP {r.status_code}')
-              except Exception as e:
-                  print(f'{name}: FAILED - {type(e).__name__}: {e}')
-          "
-
       - name: Run eval harness
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

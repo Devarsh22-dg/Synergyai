@@ -2,6 +2,7 @@ import os
 import io
 import re
 import base64
+import httpx
 import requests
 from bs4 import BeautifulSoup
 import streamlit as st
@@ -526,7 +527,14 @@ def get_client():
             "environment variable if running locally."
         )
         st.stop()
-    return anthropic.Anthropic(api_key=api_key)
+    # Force IPv4: some hosting environments (confirmed on GitHub Actions'
+    # ubuntu-latest runners) advertise an IPv6 address for api.anthropic.com
+    # with no actual working IPv6 route, and httpx doesn't fall back to IPv4
+    # the way curl does — every request fails instantly with "Connection
+    # error" otherwise. IPv4 works everywhere, so this is a safe default,
+    # not a narrow workaround for one environment.
+    http_client = httpx.Client(transport=httpx.HTTPTransport(local_address="0.0.0.0"))
+    return anthropic.Anthropic(api_key=api_key, http_client=http_client)
 
 
 def current_model():
