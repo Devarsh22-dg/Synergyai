@@ -23,23 +23,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Check the secret's shape without ever printing it (temporary)
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          python3 -c "
-          import os
-          key = os.environ['ANTHROPIC_API_KEY']
-          print(f'length: {len(key)}')
-          print(f'has leading/trailing whitespace: {key != key.strip()}')
-          print(f'contains newline: {chr(10) in key!r}, contains carriage return: {chr(13) in key!r}')
-          print(f'contains space: {chr(32) in key!r}')
-          print(f'starts with sk-ant-: {key.startswith(\"sk-ant-\")}')
-          print(f'is pure ASCII: {key.isascii()}')
-          print(f'first 7 chars: {key[:7]!r}')
-          print(f'last 3 chars (as escaped repr, to catch trailing whitespace/newlines): {key[-3:]!r}')
-          "
-
       - name: Run eval harness
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
