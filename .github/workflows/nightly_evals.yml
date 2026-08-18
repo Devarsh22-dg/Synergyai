@@ -23,30 +23,33 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Diagnose the REAL get_client() through the REAL import path (temporary)
+      - name: Isolate real-key vs call-path vs flakiness (temporary)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           python3 -c "
-          import sys
-          sys.path.insert(0, 'evals')
-          sys.path.insert(0, '.')
-          from streamlit_shim import shim
-          sys.modules['streamlit'] = shim
-          sys.modules['streamlit.components'] = shim.components
-          sys.modules['streamlit.components.v1'] = shim.components.v1
-          import synergyai_app as app
+          import os, httpx, anthropic
 
-          client = app.get_client()
-          print(f'get_client() returned: {type(client)}')
-          print(f'client._client type: {type(client._client)}')
-          print(f'client._client transport: {client._client._transport!r}')
+          real_key = os.environ['ANTHROPIC_API_KEY']
 
-          try:
-              resp = client.messages.create(model='claude-sonnet-4-6', max_tokens=10, messages=[{'role':'user','content':'hi'}])
-              print(f'REAL get_client() call: SUCCESS - {resp.content}')
-          except Exception as e:
-              print(f'REAL get_client() call: FAILED - {type(e).__name__}: {e}')
+          def try_call(label, key, use_local_address, attempts=3):
+              for i in range(attempts):
+                  kwargs = {}
+                  if use_local_address:
+                      kwargs['http_client'] = httpx.Client(transport=httpx.HTTPTransport(local_address='0.0.0.0'))
+                  c = anthropic.Anthropic(api_key=key, **kwargs)
+                  try:
+                      c.messages.create(model='claude-sonnet-4-6', max_tokens=10, messages=[{'role':'user','content':'hi'}])
+                      print(f'{label} attempt {i+1}: SUCCESS (real response, unexpected with fake key)')
+                  except anthropic.APIConnectionError as e:
+                      print(f'{label} attempt {i+1}: CONNECTION FAILED - {e}')
+                  except anthropic.AuthenticationError as e:
+                      print(f'{label} attempt {i+1}: reached server, auth error (expected if key is fake) - {e}')
+                  except Exception as e:
+                      print(f'{label} attempt {i+1}: reached server, other error - {type(e).__name__}: {e}')
+
+          try_call('B: REAL key + local_address forced, standalone', real_key, True)
+          try_call('C: REAL key + no local_address (baseline)', real_key, False, attempts=1)
           "
 
       - name: Run eval harness
