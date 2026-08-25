@@ -47,7 +47,10 @@ def _get_secret(key):
     return val or os.environ.get(key)
 
 
-def _build_authenticator():
+def _build_authenticator(warn_missing_key=True):
+    """warn_missing_key is suppressed when rebuilding an authenticator for an
+    already-logged-in session — that path runs above the main app body, where
+    the caption would surface as a stray warning on an otherwise normal page."""
     users = db.get_all_verified_users()
     credentials = {"usernames": {}}
     for u in users:
@@ -58,11 +61,12 @@ def _build_authenticator():
         }
     cookie_key = _get_secret("AUTH_COOKIE_KEY")
     if not cookie_key:
-        st.caption(
-            "⚠️ No AUTH_COOKIE_KEY secret set — using a temporary session key, "
-            "so everyone will be logged out on the next restart. Fine for local "
-            "testing; add AUTH_COOKIE_KEY as a secret before real use."
-        )
+        if warn_missing_key:
+            st.caption(
+                "⚠️ No AUTH_COOKIE_KEY secret set — using a temporary session key, "
+                "so everyone will be logged out on the next restart. Fine for local "
+                "testing; add AUTH_COOKIE_KEY as a secret before real use."
+            )
         cookie_key = "scopeforge_dev_insecure_default_key"
     return stauth.Authenticate(
         credentials,
@@ -182,6 +186,12 @@ def require_login():
     db.init_db()
 
     if st.session_state.get("authentication_status"):
+        # A returning user authenticated from their cookie can reach this
+        # early return without the login widget ever running, so nothing has
+        # stored an authenticator — and render_logout_control() then silently
+        # skips the Log Out button, stranding them with no way to sign out.
+        if "_authenticator" not in st.session_state:
+            st.session_state["_authenticator"] = _build_authenticator(warn_missing_key=False)
         return True
 
     showcase_col, auth_col = st.columns([1.15, 1], gap="large")

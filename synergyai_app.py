@@ -71,8 +71,8 @@ DOC_TYPE_CODES = {
 # Palette lives in theme.py so auth.py's login page uses the exact same values
 # — see that module's docstring for why it's shared rather than duplicated.
 from theme import (  # noqa: E402
-    NAVY, NAVY_SOFT, ACCENT, ACCENT_HOVER, TEXT, TEXT_MUTED, BORDER,
-    SIDEBAR_BG, SIDEBAR_TEXT, SIDEBAR_MUTED,
+    NAVY, NAVY_SOFT, ACCENT, ACCENT_HOVER, TEXT, TEXT_MUTED, TEXT_MUTED_STRONG,
+    BORDER, SIDEBAR_BG, SIDEBAR_TEXT, SIDEBAR_MUTED,
 )
 
 
@@ -83,6 +83,37 @@ def inject_theme():
         [data-testid="stHeader"] {{
             background-color: {SIDEBAR_BG};
             color: {SIDEBAR_TEXT};
+        }}
+        /* The header sits on the navy surface, but Streamlit still colors its
+           controls for a light header: the sidebar expand chevron computes to
+           rgba(17,24,39,.6) — near-black on near-black — so it vanishes
+           completely. Setting `color` on the header alone does not reach it,
+           because the icon span carries its own explicit color. */
+        [data-testid="stHeader"] [data-testid="stIconMaterial"],
+        [data-testid="stHeader"] svg {{
+            color: {SIDEBAR_TEXT} !important;
+            fill: {SIDEBAR_TEXT} !important;
+        }}
+        /* Contrast alone still left it reading as part of the bar — a bare
+           glyph on a wide navy expanse has no affordance. Give the sidebar
+           toggle an actual surface so it reads as a control. */
+        [data-testid="stExpandSidebarButton"],
+        [data-testid="stSidebarCollapseButton"] button,
+        button[data-testid="stSidebarCollapseButton"] {{
+            background-color: rgba(255, 255, 255, 0.10) !important;
+            border: 1px solid rgba(255, 255, 255, 0.24) !important;
+            border-radius: 6px !important;
+            /* Streamlit hides the collapse chevron until the sidebar is
+               hovered, so there is nothing to tell a first-time user the
+               sidebar can be collapsed at all. Keep it on screen. */
+            visibility: visible !important;
+            opacity: 1 !important;
+        }}
+        [data-testid="stExpandSidebarButton"]:hover,
+        [data-testid="stSidebarCollapseButton"] button:hover,
+        button[data-testid="stSidebarCollapseButton"]:hover {{
+            background-color: rgba(255, 255, 255, 0.20) !important;
+            border-color: rgba(255, 255, 255, 0.42) !important;
         }}
         [data-testid="stAppViewContainer"] .main .block-container {{
             padding-top: 1.2rem !important;
@@ -103,9 +134,16 @@ def inject_theme():
         [data-testid="stSidebar"] hr {{
             border-color: {NAVY_SOFT};
         }}
+        /* Six tabs overflow the container at ordinary window widths: the last
+           one ("Traceability & Change Impact") clips off entirely, so a whole
+           module is undiscoverable. Wrap the row rather than hiding tabs. */
+        [data-testid="stTabs"] div[role="tablist"] {{
+            flex-wrap: wrap;
+            row-gap: 4px;
+        }}
         [data-testid="stTabs"] button[role="tab"] {{
             background-color: #F3F4F6;
-            color: {TEXT_MUTED};
+            color: {TEXT_MUTED_STRONG};
             border-radius: 8px 8px 0 0;
             padding: 0.55rem 1.1rem;
             font-weight: 600;
@@ -136,7 +174,14 @@ def inject_theme():
             border-radius: 6px;
             font-weight: 600;
         }}
-        button[data-testid^="stBaseButton-secondary"] p {{
+        /* Color the button element itself, not just a descendant <p>. The file
+           uploader's "Browse files" puts its label in a bare text node with no
+           <p> to hook, so a p-only rule left it at #111827 on the accent blue
+           — 2.68:1, unreadable — while every other button looked correct. */
+        button[data-testid^="stBaseButton-secondary"],
+        button[data-testid^="stBaseButton-secondary"] p,
+        button[data-testid^="stBaseButton-secondary"] span,
+        button[data-testid^="stBaseButton-secondary"] div {{
             color: #FFFFFF !important;
         }}
         button[data-testid^="stBaseButton-secondary"]:hover {{
