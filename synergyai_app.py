@@ -855,29 +855,40 @@ def extract_text_from_upload(uploaded_file):
     uploaded_file.seek(0)
     try:
         if ext == "txt":
-            return uploaded_file.read().decode("utf-8", errors="ignore")
+            raw = uploaded_file.read()
+            if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+                text = raw.decode("utf-16")
+            else:
+                try:
+                    text = raw.decode("utf-8-sig")
+                except UnicodeDecodeError:
+                    text = raw.decode("cp1252", errors="ignore")
         elif ext == "pdf":
-            return extract_pdf_with_annotations(uploaded_file)
+            text = extract_pdf_with_annotations(uploaded_file)
         elif ext == "docx":
-            return extract_docx_with_formatting(uploaded_file)
+            text = extract_docx_with_formatting(uploaded_file)
         elif ext == "pptx":
-            return extract_pptx_with_formatting(uploaded_file)
+            text = extract_pptx_with_formatting(uploaded_file)
         elif ext == "csv":
             df = pd.read_csv(uploaded_file)
-            return df.to_string(index=False)
+            text = df.to_string(index=False)
         elif ext == "xlsx":
             xls = pd.ExcelFile(uploaded_file)
             parts = []
             for sheet in xls.sheet_names:
                 df = xls.parse(sheet)
                 parts.append(f"--- Sheet: {sheet} ---\n{df.to_string(index=False)}")
-            return "\n\n".join(parts)
+            text = "\n\n".join(parts)
         else:
             st.error(f"Unsupported file type: .{ext}")
             return ""
     except Exception as e:
         st.error(f"Couldn't read this file: {e}")
         return ""
+
+    if ext != "pdf" and not text.strip():
+        st.warning(f"No extractable text found in this .{ext} file — it may be empty or image-only.")
+    return text
 
 
 MAX_FETCH_URL_BYTES = 5 * 1024 * 1024  # cap page size before it's pulled into memory/parsed
@@ -924,6 +935,16 @@ def truncate(text, limit=MAX_CHARS):
     return text, False
 
 
+def _blank_or_value(v):
+    """Guards against pd.isna() raising on a non-scalar cell (e.g. a list/dict that
+    slipped through from an AI response field expected to be a plain string) — such a
+    value is never actually NaN, so it's stringified instead of being checked, which
+    also keeps it writable as a single Excel/Word cell value."""
+    if isinstance(v, (list, dict)):
+        return str(v)
+    return "" if pd.isna(v) else v
+
+
 # --- File Building (generating downloads) ---
 
 def build_xlsx_from_df(sheet_name, df):
@@ -935,7 +956,7 @@ def build_xlsx_from_df(sheet_name, df):
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill(start_color="1F2333", end_color="1F2333", fill_type="solid")
     for _, row in df.iterrows():
-        ws.append(["" if pd.isna(v) else v for v in row.tolist()])
+        ws.append([_blank_or_value(v) for v in row.tolist()])
     for i in range(1, len(df.columns) + 1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = 28
     buf = io.BytesIO()
@@ -954,7 +975,7 @@ def build_docx_table_from_df(title, df):
     for _, row in df.iterrows():
         cells = table.add_row().cells
         for i, v in enumerate(row.tolist()):
-            cells[i].text = "" if pd.isna(v) else str(v)
+            cells[i].text = str(_blank_or_value(v))
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()
@@ -1214,6 +1235,9 @@ def generate_prioritization(context_text):
 
 
 def generate_workshop_prep(project_description, focus_area, existing_context):
+    existing_context, was_truncated = truncate(existing_context or "")
+    if was_truncated:
+        st.caption(f"Existing project context was long — using the first {MAX_CHARS:,} characters.")
     system = (
         "You are a senior business analyst preparing for a stakeholder elicitation workshop. "
         "Produce a tight, time-boxed agenda and a targeted list of open-ended elicitation "
@@ -1225,7 +1249,7 @@ def generate_workshop_prep(project_description, focus_area, existing_context):
     user_prompt = (
         f"Project description:\n{project_description or '(none provided)'}\n\n"
         f"Workshop focus area:\n{focus_area or '(general requirements elicitation)'}\n\n"
-        f"Existing project context/documents (if any):\n{(existing_context or '(none)')[:5000]}"
+        f"Existing project context/documents (if any):\n{existing_context or '(none)'}"
     )
     return call_structured(
         system, user_prompt, "submit_workshop_prep",
