@@ -1,0 +1,10 @@
+# Native Streamlit widget theming (buttons, inputs, sliders, focus rings) —
+# keeps these in sync with the ACCENT/TEXT constants at the top of
+# synergyai_app.py. Custom CSS in inject_theme() layers on top for the
+# sidebar/tabs, which Streamlit's own theme keys don't reach.
+[theme]
+primaryColor = "#2554C7"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F4F6"
+textColor = "#111827"
+font = "sans serif"

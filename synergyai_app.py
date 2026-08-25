@@ -68,31 +68,26 @@ DOC_TYPE_CODES = {
 }
 
 # --- Visual Theme ---
-# "Forge" palette: dark steel base, ember-orange accent, distinct hues per section.
-SECTION_COLORS = {
-    "project": "#2E86AB",      # steel blue
-    "meeting": "#8E5DB3",      # violet
-    "elicitation": "#D9622B",  # ember orange
-    "docgen": "#2F9E5B",       # forge green
-    "story": "#4D6BAF",        # indigo blue
-    "traceability": "#3E7C7C", # teal
-    "dashboard": "#C1485C",    # rose
-    "pm": "#5C7A99",           # muted slate blue
-    "pgm": "#8C6A4A",          # muted bronze
-    "chat": "#33384A",         # neutral dark
-}
-SIDEBAR_BG = "#1F2333"
-SIDEBAR_TEXT = "#EDEFF5"
-SIDEBAR_MUTED = "#B8BCC8"
-ACCENT = "#FF8C42"
+# Corporate Navy: one deep-navy surface color, one accent blue, neutral grays
+# for everything else. Every section uses the same accent now — previously
+# each of the 10 sections had its own unrelated hue (steel blue, violet,
+# ember orange, forge green, rose, bronze, ...), which read as inconsistent
+# rather than designed. One accent, used consistently, reads as intentional.
+NAVY = "#0F1B2E"           # sidebar / header surface
+NAVY_SOFT = "#1B2A42"      # sidebar input/control backgrounds
+ACCENT = "#2554C7"         # the one accent color — buttons, links, active states
+TEXT = "#111827"           # primary body text
+TEXT_MUTED = "#6B7280"     # secondary/caption text
+BORDER = "#E5E7EB"         # card and table borders
+SIDEBAR_BG = NAVY
+SIDEBAR_TEXT = "#F3F5F9"
+SIDEBAR_MUTED = "#94A3B8"
 
 
 def inject_theme():
     st.markdown(
         f"""
         <style>
-        /* Collapse Streamlit's default top whitespace and color the header strip so
-           the top of the page reads as designed rather than empty. */
         [data-testid="stHeader"] {{
             background-color: {SIDEBAR_BG};
             color: {SIDEBAR_TEXT};
@@ -111,14 +106,14 @@ def inject_theme():
         }}
         [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div,
         [data-testid="stSidebar"] .stRadio div[role="radiogroup"] {{
-            background-color: #2A2F45;
+            background-color: {NAVY_SOFT};
         }}
         [data-testid="stSidebar"] hr {{
-            border-color: #3A3F58;
+            border-color: {NAVY_SOFT};
         }}
         [data-testid="stTabs"] button[role="tab"] {{
-            background-color: #F1F2F6;
-            color: #4B4F58;
+            background-color: #F3F4F6;
+            color: {TEXT_MUTED};
             border-radius: 8px 8px 0 0;
             padding: 0.55rem 1.1rem;
             font-weight: 600;
@@ -129,7 +124,7 @@ def inject_theme():
             font-weight: 600;
         }}
         [data-testid="stTabs"] button[aria-selected="true"] {{
-            background-color: {SIDEBAR_BG};
+            background-color: #FFFFFF;
             border-bottom: 3px solid {ACCENT};
         }}
         [data-testid="stTabs"] button[aria-selected="true"] p {{
@@ -137,6 +132,24 @@ def inject_theme():
         }}
         div[role="radiogroup"] {{
             gap: 0.4rem;
+        }}
+        /* Streamlit's default (non-"primary"-typed) buttons render in a plain
+           dark/outline style. Nearly every button in this app is a primary
+           action (Generate, Analyze, Sign Up, Download, ...) with no real
+           secondary/de-emphasized button anywhere, so giving them all the one
+           accent color reads as consistent rather than picking favorites. */
+        button[data-testid^="stBaseButton-secondary"] {{
+            background-color: {ACCENT};
+            border: 1px solid {ACCENT};
+            border-radius: 6px;
+            font-weight: 600;
+        }}
+        button[data-testid^="stBaseButton-secondary"] p {{
+            color: #FFFFFF !important;
+        }}
+        button[data-testid^="stBaseButton-secondary"]:hover {{
+            background-color: #1D45A6;
+            border-color: #1D45A6;
         }}
         </style>
         """,
@@ -151,7 +164,7 @@ def render_masthead():
         f"""
         <div style="background-color: {SIDEBAR_BG}; padding: 0.9rem 1.5rem; border-radius: 10px;
                     margin-bottom: 1.3rem; display: flex; align-items: baseline; gap: 0.7rem;">
-            <span style="font-size: 1.6rem; font-weight: 800; color: {ACCENT}; letter-spacing: 0.5px;">ScopeForge</span>
+            <span style="font-size: 1.6rem; font-weight: 700; color: {SIDEBAR_TEXT}; letter-spacing: 0.2px;">ScopeForge</span>
             <span style="font-size: 0.9rem; color: {SIDEBAR_MUTED};">Consulting Accelerator for Business Analysts</span>
         </div>
         """,
@@ -159,14 +172,12 @@ def render_masthead():
     )
 
 
-
-
-def section_header(title, subtitle, color):
+def section_header(title, subtitle):
     st.markdown(
         f"""
-        <div style="border-left: 6px solid {color}; padding: 0.35rem 0 0.35rem 0.9rem; margin-bottom: 0.8rem;">
-            <div style="font-size: 1.3rem; font-weight: 700; color: {color}; line-height: 1.2;">{title}</div>
-            <div style="font-size: 0.9rem; color: #5A5A5A; margin-top: 2px;">{subtitle}</div>
+        <div style="border-left: 3px solid {ACCENT}; padding: 0.35rem 0 0.35rem 0.9rem; margin-bottom: 0.8rem;">
+            <div style="font-size: 1.3rem; font-weight: 700; color: {TEXT}; line-height: 1.2;">{title}</div>
+            <div style="font-size: 0.9rem; color: {TEXT_MUTED}; margin-top: 2px;">{subtitle}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1363,7 +1374,7 @@ def chat_with_bot(history):
 # --- Role-Specific Functions ---
 
 def render_dashboard(proj, cp):
-    section_header("BA Dashboard", f"Summary view for {cp} in this session.", SECTION_COLORS["dashboard"])
+    section_header("BA Dashboard", f"Summary view for {cp} in this session.")
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("User Stories Drafted", proj.get("stories_drafted", 0))
@@ -1423,7 +1434,7 @@ def ba_module():
 
     # --- Tab 0: Project & Documents ---
     with tab0:
-        section_header("Project Information & Document Repository", f"Active project: {cp}", SECTION_COLORS["project"])
+        section_header("Project Information & Document Repository", f"Active project: {cp}")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -1562,7 +1573,7 @@ def ba_module():
             )
 
         st.markdown("---")
-        with st.expander("📖 Business Glossary", expanded=False):
+        with st.expander("Business Glossary", expanded=False):
             st.caption(
                 "Scans this project's repository documents and pulls out domain terms, acronyms, "
                 "and system names with plain-language definitions — handy for onboarding new "
@@ -1618,7 +1629,6 @@ def ba_module():
         section_header(
             "Meeting Intelligence & Actionizer",
             "Transform raw meeting transcripts into structured minutes, decisions, and action items.",
-            SECTION_COLORS["meeting"],
         )
 
         uploaded_transcript = st.file_uploader(
@@ -1675,10 +1685,9 @@ def ba_module():
         section_header(
             "Elicitation Analysis & Gap Detector",
             "Upload raw notes or transcripts. AI will structure needs and identify open questions.",
-            SECTION_COLORS["elicitation"],
         )
 
-        with st.expander("🗓️ Prep for a Stakeholder Workshop", expanded=False):
+        with st.expander("Prep for a Stakeholder Workshop", expanded=False):
             st.caption("Get a time-boxed agenda and targeted questions before you walk into the room.")
             focus_area = st.text_input(
                 "What's this workshop about?",
@@ -1804,7 +1813,7 @@ def ba_module():
                 st.warning(f"**{q.get('type', 'Issue')}:** {q.get('issue', '')}\n\n*Why it matters:* {q.get('why_it_matters', '')}")
 
         st.markdown("---")
-        with st.expander("📊 Prioritize Requirements (MoSCoW)", expanded=False):
+        with st.expander("Prioritize Requirements (MoSCoW)", expanded=False):
             st.caption(
                 "Scores the requirements in the content analyzed above as Must/Should/Could/Won't Have, "
                 "with a rationale for each."
@@ -1846,7 +1855,6 @@ def ba_module():
         section_header(
             "Documentation Generator",
             "Generate a real first-draft document from your requirements notes, exportable to Word or Excel.",
-            SECTION_COLORS["docgen"],
         )
 
         doc_type = st.selectbox("Select Document Type to Draft", list(DOC_TYPE_CODES.keys()), key=f"doc_type_select_{cp}")
@@ -1982,7 +1990,6 @@ def ba_module():
         section_header(
             "Agile Story & Backlog Creator",
             "Convert validated requirements into ready-to-import User Stories and Gherkin Acceptance Criteria.",
-            SECTION_COLORS["story"],
         )
 
         repo_doc_names = [d["name"] for d in proj["documents"]]
@@ -2036,7 +2043,7 @@ def ba_module():
                 )
 
             st.markdown("---")
-            with st.expander("✅ Generate Test Cases from These Stories", expanded=False):
+            with st.expander("Generate Test Cases from These Stories", expanded=False):
                 st.caption("Derives test cases straight from the acceptance criteria above — no re-typing.")
                 if st.button("Generate Test Cases", key=f"generate_tc_btn_{cp}"):
                     with st.spinner("Writing test cases..."):
@@ -2078,7 +2085,6 @@ def ba_module():
         section_header(
             "Requirements Traceability Matrix",
             "Auto-links Requirement → User Story → Test Case → Priority from what you've already generated. Edit freely.",
-            SECTION_COLORS["traceability"],
         )
 
         if not proj.get("stories"):
@@ -2120,7 +2126,6 @@ def ba_module():
         section_header(
             "Change Request Impact Analyzer",
             "Paste an incoming change request. AI checks it against this project's requirements/stories and flags what it touches.",
-            SECTION_COLORS["traceability"],
         )
 
         change_request_text = st.text_area(
@@ -2189,7 +2194,6 @@ def pm_module():
     section_header(
         "Project Managers: Predictive Risk & Health (Placeholder)",
         "View predictive metrics, resource optimization, and automated status reports.",
-        SECTION_COLORS["pm"],
     )
     st.selectbox("Select Project to View", list(st.session_state["projects"].keys()))
     st.info("PM features (Project Health Forecaster, Constraint Solver) haven't been built yet — this module is still a placeholder.")
@@ -2199,7 +2203,6 @@ def pgm_module():
     section_header(
         "Program Managers: Portfolio Optimization (Placeholder)",
         "Analyze cross-project dependencies, resource contention, and benefit realization.",
-        SECTION_COLORS["pgm"],
     )
     st.warning("PgM features (Interdependency Mapper, Benefit Realization Tracker) haven't been built yet — this module is still a placeholder.")
 
@@ -2208,10 +2211,14 @@ if __name__ == "__main__":
     # --- Main App Navigation ---
     import auth  # local import — see note near check_access()
 
+    # Theme goes in before the auth gate — otherwise the login/signup screen
+    # renders completely unstyled, since check_access() st.stop()s before any
+    # of this CSS would have been injected.
+    inject_theme()
+
     if not check_access():
         st.stop()
 
-    inject_theme()
     render_masthead()
     init_projects()
 
@@ -2261,7 +2268,7 @@ if __name__ == "__main__":
         pgm_module()
 
     st.divider()
-    section_header("ScopeBot (AI Assistant)", "Ask about requirements, JIRA sync, or BA best practices.", SECTION_COLORS["chat"])
+    section_header("ScopeBot (AI Assistant)", "Ask about requirements, JIRA sync, or BA best practices.")
 
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
