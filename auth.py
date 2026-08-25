@@ -22,8 +22,20 @@ import streamlit as st
 import streamlit_authenticator as stauth
 
 import db
+from theme import NAVY, ACCENT, SIDEBAR_TEXT, SIDEBAR_MUTED, TEXT_MUTED
 
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,20}$")
+
+# What the login page showcases. Kept in sync with the tabs that actually
+# exist in ba_module() — don't advertise the PM/PgM modules here, they're
+# still placeholders.
+CAPABILITIES = [
+    ("Elicitation Analysis", "Upload notes, transcripts, or documents and get ambiguities, missing NFRs, and stakeholder conflicts flagged with a risk score."),
+    ("Documentation Generator", "First-draft BRDs, FRDs, Use Cases, Data Dictionaries, and As-Is / To-Be process maps, exportable to Word, Excel, or Visio."),
+    ("Agile Story & Test Cases", "Turn requirements into user stories with Gherkin acceptance criteria, then derive test cases from them. Exports to Jira and Azure DevOps."),
+    ("Meeting Actionizer", "Raw transcript in, structured minutes out: decisions, action items, owners, and due dates."),
+    ("Traceability & Change Impact", "Auto-linked Requirement to Story to Test Case matrix, plus impact analysis on incoming change requests."),
+]
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -120,6 +132,49 @@ def _render_signup():
     st.success("Account created — switch to the Log In tab and sign in with your new credentials.")
 
 
+def _render_showcase():
+    """The left-hand panel on the login screen: an optional demo video plus
+    what the app actually does.
+
+    The video is intentionally configuration, not a committed asset — set a
+    DEMO_VIDEO_URL secret (or env var) to any URL st.video accepts (YouTube,
+    Vimeo, a direct .mp4, an S3/CDN link). Until one is set, the capability
+    list below carries the page on its own, so this never renders as a broken
+    or empty player."""
+    video_url = _get_secret("DEMO_VIDEO_URL")
+
+    st.markdown(
+        f"""
+        <div style="background-color: {NAVY}; border-radius: 10px;
+                    padding: 1.5rem 1.6rem 0.4rem 1.6rem; margin-bottom: 1rem;">
+            <div style="font-size: 1.5rem; font-weight: 700; color: {SIDEBAR_TEXT};
+                        letter-spacing: 0.2px; margin-bottom: 0.2rem;">ScopeForge</div>
+            <div style="font-size: 0.9rem; color: {SIDEBAR_MUTED}; margin-bottom: 1.2rem;">
+                An AI-augmented workspace for business analysts.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if video_url:
+        st.video(video_url)
+        st.caption("A two-minute tour of what ScopeForge does.")
+        st.markdown("")
+
+    for name, description in CAPABILITIES:
+        st.markdown(
+            f"""
+            <div style="border-left: 3px solid {ACCENT}; padding: 0.15rem 0 0.15rem 0.8rem;
+                        margin-bottom: 0.9rem;">
+                <div style="font-size: 0.95rem; font-weight: 600; color: {NAVY};">{name}</div>
+                <div style="font-size: 0.85rem; color: {TEXT_MUTED}; line-height: 1.45;">{description}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
 def require_login():
     """Call at the top of the app. Returns True once a verified user is
     logged in; otherwise renders the login/signup UI and returns False so
@@ -129,22 +184,62 @@ def require_login():
     if st.session_state.get("authentication_status"):
         return True
 
-    st.markdown("## Welcome to ScopeForge")
+    showcase_col, auth_col = st.columns([1.15, 1], gap="large")
 
-    tab_login, tab_signup = st.tabs(["Log In", "Sign Up"])
+    with showcase_col:
+        _render_showcase()
 
-    with tab_login:
-        authenticator = _build_authenticator()
-        authenticator.login(location="main", key="login_form")
-        st.session_state["_authenticator"] = authenticator
-        status = st.session_state.get("authentication_status")
-        if status is False:
-            st.error("Incorrect username or password.")
-        elif status is None:
-            st.info("Enter your credentials to log in.")
+    with auth_col:
+        st.markdown("### Welcome to ScopeForge")
+        tab_login, tab_signup = st.tabs(["Log In", "Sign Up"])
 
-    with tab_signup:
-        _render_signup()
+        with tab_login:
+            if not db.get_all_verified_users():
+                # streamlit_authenticator raises LoginError('User not
+                # authorized') if handed an empty credentials dict, which
+                # surfaces as a raw Python traceback on the login page. That
+                # is the normal state for a fresh deployment — and on
+                # Streamlit Community Cloud the SQLite file is wiped on every
+                # redeploy, so it would recur constantly. Show the signup
+                # prompt instead of instantiating the login widget at all.
+                st.info("No accounts exist yet. Use the Sign Up tab to create the first one.")
+            else:
+                authenticator = _build_authenticator()
+                try:
+                    authenticator.login(location="main", key="login_form")
+                except stauth.LoginError:
+                    # The browser is holding a re-authentication cookie naming a
+                    # user who no longer exists in the database, so
+                    # streamlit_authenticator raises before rendering anything.
+                    #
+                    # This is not an edge case here: Streamlit Community Cloud's
+                    # filesystem is ephemeral, so the SQLite file is wiped on
+                    # every redeploy while users' 30-day cookies survive. Left
+                    # unhandled it renders a raw Python traceback in place of the
+                    # login form — locking the user out of even signing up again
+                    # until they manually clear cookies. Drop the dead cookie and
+                    # retry once; the guard stops that becoming a reload loop if
+                    # deletion doesn't take effect.
+                    authenticator.cookie_controller.delete_cookie()
+                    if st.session_state.get("_stale_cookie_cleared"):
+                        st.warning(
+                            "Your saved session is no longer valid. Please refresh "
+                            "the page to log in again."
+                        )
+                    else:
+                        st.session_state["_stale_cookie_cleared"] = True
+                        st.rerun()
+                else:
+                    st.session_state.pop("_stale_cookie_cleared", None)
+                    st.session_state["_authenticator"] = authenticator
+                    status = st.session_state.get("authentication_status")
+                    if status is False:
+                        st.error("Incorrect username or password.")
+                    elif status is None:
+                        st.info("Enter your credentials to log in.")
+
+        with tab_signup:
+            _render_signup()
 
     return bool(st.session_state.get("authentication_status"))
 

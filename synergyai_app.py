@@ -68,20 +68,12 @@ DOC_TYPE_CODES = {
 }
 
 # --- Visual Theme ---
-# Corporate Navy: one deep-navy surface color, one accent blue, neutral grays
-# for everything else. Every section uses the same accent now — previously
-# each of the 10 sections had its own unrelated hue (steel blue, violet,
-# ember orange, forge green, rose, bronze, ...), which read as inconsistent
-# rather than designed. One accent, used consistently, reads as intentional.
-NAVY = "#0F1B2E"           # sidebar / header surface
-NAVY_SOFT = "#1B2A42"      # sidebar input/control backgrounds
-ACCENT = "#2554C7"         # the one accent color — buttons, links, active states
-TEXT = "#111827"           # primary body text
-TEXT_MUTED = "#6B7280"     # secondary/caption text
-BORDER = "#E5E7EB"         # card and table borders
-SIDEBAR_BG = NAVY
-SIDEBAR_TEXT = "#F3F5F9"
-SIDEBAR_MUTED = "#94A3B8"
+# Palette lives in theme.py so auth.py's login page uses the exact same values
+# — see that module's docstring for why it's shared rather than duplicated.
+from theme import (  # noqa: E402
+    NAVY, NAVY_SOFT, ACCENT, ACCENT_HOVER, TEXT, TEXT_MUTED, BORDER,
+    SIDEBAR_BG, SIDEBAR_TEXT, SIDEBAR_MUTED,
+)
 
 
 def inject_theme():
@@ -148,8 +140,8 @@ def inject_theme():
             color: #FFFFFF !important;
         }}
         button[data-testid^="stBaseButton-secondary"]:hover {{
-            background-color: #1D45A6;
-            border-color: #1D45A6;
+            background-color: {ACCENT_HOVER};
+            border-color: {ACCENT_HOVER};
         }}
         </style>
         """,
