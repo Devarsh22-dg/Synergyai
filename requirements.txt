@@ -1,7 +1,6 @@
 streamlit
 pandas
 anthropic
-httpx           # Direct dependency now (get_client() forces IPv4 to avoid a broken-IPv6-route failure mode)
 python-docx     # For reading/writing .docx files (Word) — including bold/strike formatting and comments
 python-pptx     # For reading .pptx files (PowerPoint) — slide text, notes, and embedded images
 Pillow          # For resizing/encoding images extracted from documents before sending to Claude vision
