@@ -1522,6 +1522,31 @@ def process_meeting(transcript_text):
     )
 
 
+MAX_CHAT_MESSAGES_SENT = 20  # roughly ten back-and-forth exchanges of context
+MAX_CHAT_MESSAGE_CHARS = 6000  # one pasted wall of text shouldn't crowd out the rest
+
+
+def _recent_chat_messages(history):
+    """Bounds the conversation handed to the API, without touching what's on screen.
+
+    chat_history lives for the whole session and every turn resends all of it, so
+    a long working session steadily increases cost and eventually runs into the
+    model's context limit. Trimming here rather than in session_state keeps the
+    user's full transcript visible while capping what actually goes over the wire.
+    """
+    trimmed = []
+    for msg in history[-MAX_CHAT_MESSAGES_SENT:]:
+        content = msg["content"]
+        if len(content) > MAX_CHAT_MESSAGE_CHARS:
+            content = content[:MAX_CHAT_MESSAGE_CHARS] + "\n\n[...truncated for length...]"
+        trimmed.append({"role": msg["role"], "content": content})
+    # The API needs the first message to come from the user, and a window taken
+    # out of the middle of a conversation can easily start on an assistant reply.
+    while trimmed and trimmed[0]["role"] != "user":
+        trimmed.pop(0)
+    return trimmed
+
+
 def chat_with_bot(history):
     proj = get_project()
     proj_name = get_current_project_name()
@@ -1531,7 +1556,8 @@ def chat_with_bot(history):
     if proj.get("documents"):
         doc_names = ", ".join(d["name"] for d in proj["documents"][:10])
         context_note += f" Documents in this project's repository: {doc_names}."
-    return call_chat(CHATBOT_SYSTEM_PROMPT + context_note, history, max_tokens=800)
+    return call_chat(CHATBOT_SYSTEM_PROMPT + context_note,
+                     _recent_chat_messages(history), max_tokens=800)
 
 
 # --- Role-Specific Functions ---
