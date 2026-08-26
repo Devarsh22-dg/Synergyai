@@ -10,7 +10,6 @@ import anthropic
 import pypdf
 from docx import Document
 from pptx import Presentation
-from pptx.util import Emu
 from PIL import Image
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
@@ -1535,8 +1534,11 @@ def ba_module():
                     if text.strip():
                         add_doc_to_repo(proj, f.name, text, f.name.split(".")[-1].lower())
                         added += 1
-                st.success(f"Added {added} document(s) to the repository.")
-                st.rerun()
+                if added:
+                    st.success(f"Added {added} document(s) to the repository.")
+                    st.rerun()
+                else:
+                    st.warning("No documents were added — none of the selected file(s) had readable text.")
 
         if proj["documents"]:
             st.markdown(f"**{len(proj['documents'])} document(s) in repository:**")
