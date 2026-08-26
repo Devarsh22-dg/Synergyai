@@ -807,6 +807,22 @@ def extract_pdf_with_annotations(uploaded_file, describe_images=True):
     character font styling, and strikethrough in a PDF is often just a drawn line
     rather than a text attribute, so it can't be reliably detected generically."""
     reader = pypdf.PdfReader(uploaded_file)
+    if reader.is_encrypted:
+        # Plenty of routine exports (DocuSign, SharePoint, Acrobat's "restrict
+        # editing") are encrypted with an *empty* user password purely to limit
+        # editing or printing — every PDF viewer opens these without prompting,
+        # but pypdf refuses to read the pages until it's told to decrypt. Only
+        # the empty password is tried: a PDF with a real password still fails,
+        # as it should.
+        try:
+            unlocked = reader.decrypt("")
+        except Exception:
+            unlocked = False
+        if not unlocked:
+            raise ValueError(
+                "This PDF is password-protected. Open it with the password, save an "
+                "unprotected copy, and upload that instead."
+            )
     pages = [page.extract_text() or "" for page in reader.pages]
     text = "\n".join(pages)
     if not text.strip():
