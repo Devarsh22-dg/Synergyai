@@ -842,6 +842,23 @@ def extract_pdf_with_annotations(uploaded_file, describe_images=True):
     return text
 
 
+def _iter_pptx_shapes(shapes, _depth=0):
+    """Yields a slide's shapes, descending into grouped ones.
+
+    Grouping a screenshot with a caption box is a very common way to annotate a
+    slide, and it nests both inside a GROUP shape — so a flat pass over
+    slide.shapes skips them silently: no error, the picture and its text simply
+    never reach the AI. The depth cap stops a pathologically nested file from
+    recursing away; content below it is skipped rather than crashing."""
+    if _depth > 10:
+        return
+    for shape in shapes:
+        if shape.shape_type == 6:  # MSO_SHAPE_TYPE.GROUP
+            yield from _iter_pptx_shapes(shape.shapes, _depth + 1)
+        else:
+            yield shape
+
+
 def extract_pptx_with_formatting(uploaded_file, describe_images=True):
     """Reads a .pptx slide-by-slide: slide title/body text (with bold/italic markdown
     markers), speaker notes, and embedded images (screenshots often pasted into slides
@@ -852,7 +869,7 @@ def extract_pptx_with_formatting(uploaded_file, describe_images=True):
 
     for slide_num, slide in enumerate(prs.slides, start=1):
         slide_lines = [f"--- Slide {slide_num} ---"]
-        for shape in slide.shapes:
+        for shape in _iter_pptx_shapes(slide.shapes):
             if shape.shape_type == 13:  # MSO_SHAPE_TYPE.PICTURE
                 try:
                     image_bytes_list.append(shape.image.blob)
