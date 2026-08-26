@@ -2,6 +2,9 @@ import os
 import io
 import re
 import base64
+import socket
+import ipaddress
+from urllib.parse import urlparse, urljoin
 import requests
 from bs4 import BeautifulSoup
 import streamlit as st
@@ -939,6 +942,50 @@ def extract_text_from_upload(uploaded_file):
 
 
 MAX_FETCH_URL_BYTES = 5 * 1024 * 1024  # cap page size before it's pulled into memory/parsed
+MAX_FETCH_REDIRECTS = 5
+
+
+def _assert_public_url(url):
+    """Rejects a URL that doesn't point at a public internet host.
+
+    Source URLs are user-supplied but fetched *server-side*, so without this check
+    the fetcher could be aimed at addresses only the server can reach — cloud
+    instance-metadata endpoints, admin panels on the host network, localhost
+    services — and their responses read back through the app. Every address the
+    hostname resolves to is checked, so a public-looking hostname with a private
+    A record is rejected too.
+
+    Limitation: this validates at resolve time. A hostname whose DNS answer
+    changes between this check and the actual connection (DNS rebinding) is not
+    defeated by this alone; that needs connection-level IP pinning, which is a
+    bigger change than belongs here.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(
+            f"Only http:// and https:// URLs can be fetched (got "
+            f"'{parsed.scheme or 'no scheme'}')."
+        )
+    host = parsed.hostname
+    if not host:
+        raise ValueError("That doesn't look like a valid URL — no hostname found.")
+
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        raise ValueError(f"Couldn't resolve '{host}' — check the address and try again.") from None
+
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.version == 6 and ip.ipv4_mapped:
+            ip = ip.ipv4_mapped
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            raise ValueError(
+                f"'{host}' resolves to a private or internal address ({ip}). "
+                "Only public webpages can be fetched."
+            )
 
 
 def fetch_url_text(url, timeout=10):
@@ -946,7 +993,28 @@ def fetch_url_text(url, timeout=10):
     Only handles publicly-accessible pages — see the 'Pages that require a login' note
     in the Project & Documents tab for why authenticated fetching isn't implemented."""
     headers = {"User-Agent": "Mozilla/5.0 (compatible; ScopeForge-DocBot/1.0)"}
-    resp = requests.get(url, headers=headers, timeout=timeout, stream=True)
+
+    # Redirects are followed by hand so every hop gets the same public-address
+    # check as the original URL — otherwise a public URL could bounce the fetch
+    # to an internal one and sidestep the check entirely.
+    current = url
+    for _ in range(MAX_FETCH_REDIRECTS + 1):
+        _assert_public_url(current)
+        resp = requests.get(current, headers=headers, timeout=timeout,
+                            stream=True, allow_redirects=False)
+        if 300 <= resp.status_code < 400:
+            location = resp.headers.get("Location")
+            resp.close()
+            if not location:
+                raise ValueError("This URL redirected without saying where to.")
+            current = urljoin(current, location)
+            continue
+        break
+    else:
+        raise ValueError(
+            f"This URL redirected more than {MAX_FETCH_REDIRECTS} times — giving up."
+        )
+
     resp.raise_for_status()
 
     chunks = []
