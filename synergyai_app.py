@@ -4,6 +4,7 @@ import re
 import base64
 import socket
 import ipaddress
+import zipfile
 from urllib.parse import urlparse, urljoin
 import requests
 from bs4 import BeautifulSoup
@@ -894,6 +895,41 @@ def extract_pptx_with_formatting(uploaded_file, describe_images=True):
 
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # cap uploaded files before they're parsed/sent to vision
+MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024  # cap what a zip-backed Office file expands to
+_ZIP_BACKED_EXTS = ("docx", "pptx", "xlsx")
+
+
+def _assert_safe_archive(uploaded_file, ext):
+    """Guards against a decompression bomb in a zip-backed Office file.
+
+    .docx/.pptx/.xlsx are zip archives, so MAX_UPLOAD_BYTES only caps the
+    *compressed* bytes on the way in. python-docx / python-pptx / openpyxl all
+    unzip internally, so a small archive can declare gigabytes of content and
+    exhaust memory before any of the app's other limits apply. Reading the
+    archive's central directory gives the declared sizes without decompressing
+    anything, so this costs almost nothing.
+
+    This trusts the sizes the archive declares. A hand-crafted zip can
+    understate them, so treat it as a guard against the realistic case rather
+    than a hard guarantee.
+    """
+    uploaded_file.seek(0)
+    try:
+        with zipfile.ZipFile(uploaded_file) as zf:
+            total = sum(info.file_size for info in zf.infolist())
+    except zipfile.BadZipFile:
+        raise ValueError(
+            f"This .{ext} file isn't a readable Office document — it may be corrupted."
+        ) from None
+    finally:
+        uploaded_file.seek(0)
+
+    if total > MAX_UNCOMPRESSED_BYTES:
+        raise ValueError(
+            f"This .{ext} file expands to about {total // (1024*1024)}MB when opened, "
+            f"over the {MAX_UNCOMPRESSED_BYTES // (1024*1024)}MB limit — it can't be "
+            "processed safely."
+        )
 
 
 def extract_text_from_upload(uploaded_file):
@@ -902,6 +938,12 @@ def extract_text_from_upload(uploaded_file):
     if uploaded_file.size > MAX_UPLOAD_BYTES:
         st.error(f"This file is larger than {MAX_UPLOAD_BYTES // (1024*1024)}MB — too large to process.")
         return ""
+    if ext in _ZIP_BACKED_EXTS:
+        try:
+            _assert_safe_archive(uploaded_file, ext)
+        except ValueError as e:
+            st.error(str(e))
+            return ""
     uploaded_file.seek(0)
     try:
         if ext == "txt":
