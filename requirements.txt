@@ -1,11 +1,24 @@
-streamlit
-pandas
-anthropic
-python-docx     # For reading/writing .docx files (Word) — including bold/strike formatting and comments
-python-pptx     # For reading .pptx files (PowerPoint) — slide text, notes, and embedded images
-Pillow          # For resizing/encoding images extracted from documents before sending to Claude vision
-openpyxl        # For reading/writing .xlsx files (Excel)
-pypdf           # For reading .pdf files, their comment annotations, and embedded images
-requests        # For fetching public webpage content (Source URLs)
-beautifulsoup4  # For parsing fetched webpage HTML into clean text
-streamlit-authenticator  # Login: password hashing + session cookie handling
+# Direct dependencies are pinned so CI, Codespaces and the deployed app all
+# install the same versions. Both GitHub Actions and Streamlit Cloud install
+# straight from this file with no lockfile, so without pins a surprise upstream
+# release lands in production unannounced — which has broken this app before.
+#
+# Versions below were resolved fresh on Python 3.11 (matching CI) and verified
+# against the app's compile check, the eval dry-run, and the document
+# parsing/export paths. Bump them deliberately, and re-run those checks after.
+#
+# Transitive dependencies are intentionally left unpinned — this is not a full
+# lockfile. See the note in the nightly summary if stricter reproducibility is
+# wanted for audit purposes.
+
+streamlit==1.62.0
+pandas==3.0.5
+anthropic==1.1.0
+python-docx==1.2.0     # For reading/writing .docx files (Word) — including bold/strike formatting and comments
+python-pptx==1.0.2     # For reading .pptx files (PowerPoint) — slide text, notes, and embedded images
+Pillow==12.3.0         # For resizing/encoding images extracted from documents before sending to Claude vision
+openpyxl==3.1.5        # For reading/writing .xlsx files (Excel)
+pypdf==6.16.2          # For reading .pdf files, their comment annotations, and embedded images
+requests==2.34.2       # For fetching public webpage content (Source URLs)
+beautifulsoup4==4.15.0 # For parsing fetched webpage HTML into clean text
+streamlit-authenticator==0.4.2  # Login: password hashing + session cookie handling
