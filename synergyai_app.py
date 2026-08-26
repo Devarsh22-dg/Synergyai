@@ -30,6 +30,13 @@ st.set_page_config(layout="wide", page_title="ScopeForge: Consulting Accelerator
 DEFAULT_MODEL = "claude-sonnet-4-6"
 FAST_MODEL = "claude-haiku-4-5-20251001"
 
+# Display-only labels for the sidebar picker — the stored value stays the raw
+# model ID, so which model actually gets called is unchanged.
+MODEL_LABELS = {
+    DEFAULT_MODEL: "Sonnet — best quality",
+    FAST_MODEL: "Haiku — faster & cheaper",
+}
+
 STARTER_PROJECTS = ["Alpha-FinTech Migration", "Beta-Supply Chain Optimization", "Gamma-HR Platform Rollout"]
 PROJECT_STATUSES = ["Planning", "In Progress", "On Hold", "Complete"]
 
@@ -2458,6 +2465,7 @@ if __name__ == "__main__":
     st.sidebar.markdown("---")
     st.sidebar.selectbox(
         "AI Model", [DEFAULT_MODEL, FAST_MODEL], index=0, key="model",
+        format_func=lambda m: MODEL_LABELS.get(m, m),
         help="Sonnet = best quality for analysis/drafting. Haiku = faster and cheaper, good for quick checks.",
     )
     if not get_api_key():
