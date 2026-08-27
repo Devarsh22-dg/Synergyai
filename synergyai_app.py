@@ -1003,23 +1003,30 @@ def extract_text_from_upload(uploaded_file):
             text = extract_pptx_with_formatting(uploaded_file)
         elif ext == "csv":
             df = pd.read_csv(uploaded_file)
-            text = df.to_string(index=False)
+            text = df.to_string(index=False) if not df.empty else ""
         elif ext == "xlsx":
             xls = pd.ExcelFile(uploaded_file)
             parts = []
             for sheet in xls.sheet_names:
                 df = xls.parse(sheet)
-                parts.append(f"--- Sheet: {sheet} ---\n{df.to_string(index=False)}")
+                if not df.empty:
+                    parts.append(f"--- Sheet: {sheet} ---\n{df.to_string(index=False)}")
             text = "\n\n".join(parts)
         else:
             st.error(f"Unsupported file type: .{ext}")
             return ""
+    except ValueError as e:
+        st.error(str(e))
+        return ""
     except Exception as e:
         st.error(f"Couldn't read this file: {e}")
         return ""
 
     if ext != "pdf" and not text.strip():
-        st.warning(f"No extractable text found in this .{ext} file — it may be empty or image-only.")
+        if ext in ("docx", "pptx"):
+            st.warning(f"No extractable text found in this .{ext} file — it may be empty or image-only.")
+        else:
+            st.warning(f"No extractable text found in this .{ext} file — it may be empty.")
     return text
 
 
@@ -1371,9 +1378,9 @@ def generate_test_cases(stories):
     story_lines = []
     for s in stories:
         story_lines.append(
-            f"Requirement: {s.get('requirement', '')}\n"
-            f"User Story: {s.get('user_story', '')}\n"
-            f"Acceptance Criteria: {s.get('acceptance_criteria', '')}"
+            f"Requirement: {s.get('requirement') or ''}\n"
+            f"User Story: {s.get('user_story') or ''}\n"
+            f"Acceptance Criteria: {s.get('acceptance_criteria') or ''}"
         )
     source_text, was_truncated = truncate("\n\n".join(story_lines))
     if was_truncated:
