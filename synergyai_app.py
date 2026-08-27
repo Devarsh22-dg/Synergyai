@@ -13,6 +13,7 @@ import pandas as pd
 import anthropic
 import pypdf
 from docx import Document
+from docx.table import Table as DocxTable
 from pptx import Presentation
 from PIL import Image
 from openpyxl import Workbook
@@ -747,9 +748,13 @@ def extract_docx_with_formatting(uploaded_file, describe_images=True):
     """Reads a .docx with formatting awareness instead of flattening to plain text.
     Bold runs are wrapped **like this**, struck-through runs ~~like this~~, and italic
     runs *like this* — markdown conventions the AI already understands, so emphasis and
-    deprecated/removed content carry through as real signal. Inline comments (Word's
-    actual comment feature, not Track Changes) are appended as a labeled section.
-    Embedded images (screenshots, diagrams) are extracted and described via Claude vision.
+    deprecated/removed content carry through as real signal. Tables are walked in the
+    same document order as paragraphs (via iter_inner_content) and each row rendered as
+    "cell | cell | cell" — plain text formatting inside a cell isn't preserved, but the
+    content itself is, which paragraph-only extraction previously dropped entirely.
+    Inline comments (Word's actual comment feature, not Track Changes) are appended as
+    a labeled section. Embedded images (screenshots, diagrams) are extracted and
+    described via Claude vision.
 
     Known limitation: Word's Track Changes redline deletions/insertions (the dotted
     underline / strikethrough you see when "Show Markup" is on) are a different XML
@@ -758,7 +763,14 @@ def extract_docx_with_formatting(uploaded_file, describe_images=True):
     """
     doc = Document(uploaded_file)
     lines = []
-    for para in doc.paragraphs:
+    for item in doc.iter_inner_content():
+        if isinstance(item, DocxTable):
+            for row in item.rows:
+                cells_text = [cell.text.strip() for cell in row.cells]
+                if any(cells_text):
+                    lines.append(" | ".join(cells_text))
+            continue
+        para = item
         if not para.runs:
             if para.text.strip():
                 lines.append(para.text)
@@ -884,7 +896,9 @@ def _iter_pptx_shapes(shapes, _depth=0):
 
 def extract_pptx_with_formatting(uploaded_file, describe_images=True):
     """Reads a .pptx slide-by-slide: slide title/body text (with bold/italic markdown
-    markers), speaker notes, and embedded images (screenshots often pasted into slides
+    markers), table content (each row rendered as "cell | cell | cell" — a table shape
+    has no text frame of its own, so it's checked for separately from regular text
+    shapes), speaker notes, and embedded images (screenshots often pasted into slides
     to illustrate a workflow) described via Claude vision."""
     prs = Presentation(uploaded_file)
     lines = []
@@ -898,6 +912,12 @@ def extract_pptx_with_formatting(uploaded_file, describe_images=True):
                     image_bytes_list.append(shape.image.blob)
                 except Exception:
                     pass
+                continue
+            if shape.has_table:
+                for row in shape.table.rows:
+                    cells_text = [cell.text.strip() for cell in row.cells]
+                    if any(cells_text):
+                        slide_lines.append(" | ".join(cells_text))
                 continue
             if not shape.has_text_frame:
                 continue
