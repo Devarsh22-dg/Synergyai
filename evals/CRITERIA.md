@@ -21,10 +21,10 @@ Overall score for a run is the average of its criteria. A run **fails the gate**
   present or notably absent in the fixture text. No invented requirements.
 - **Coverage** — the gaps a human BA would flag in this fixture (deliberately
   seeded ambiguities/missing NFRs) are actually caught.
-- **Risk calibration** — risk_score/risk_level is proportionate to what's
-  actually wrong with the fixture, not reflexively high or low.
 - **Actionability** — each "why_it_matters" gives a BA something they could
   actually take to a stakeholder, not generic filler.
+- **Summary quality** — the summary reflects what the findings actually say;
+  it should not describe problems that never appear in open_questions.
 
 ## generate_stories (Agile Story & Backlog Creator)
 

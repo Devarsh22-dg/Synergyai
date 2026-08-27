@@ -234,13 +234,6 @@ def section_header(title, subtitle):
 GAP_ANALYSIS_SCHEMA = {
     "type": "object",
     "properties": {
-        "risk_score": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 100,
-            "description": "Overall requirements risk score, 0 (low risk) to 100 (high risk).",
-        },
-        "risk_level": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"]},
         "summary": {
             "type": "string",
             "description": "One or two sentence summary of the overall state of these requirements.",
@@ -264,7 +257,7 @@ GAP_ANALYSIS_SCHEMA = {
             },
         },
     },
-    "required": ["risk_score", "risk_level", "open_questions"],
+    "required": ["summary", "open_questions"],
 }
 
 STORY_SCHEMA = {
@@ -630,7 +623,7 @@ def call_chat(system, messages, max_tokens=800, model=None):
         return None
 
 
-def call_structured(system, user_prompt, tool_name, tool_description, schema, max_tokens=2000, model=None):
+def call_structured(system, user_prompt, tool_name, tool_description, schema, max_tokens=8000, model=None):
     client = get_client()
     try:
         resp = client.messages.create(
@@ -641,6 +634,18 @@ def call_structured(system, user_prompt, tool_name, tool_description, schema, ma
             tools=[{"name": tool_name, "description": tool_description, "input_schema": schema}],
             tool_choice={"type": "tool", "name": tool_name},
         )
+        # A response cut off at the token ceiling returns a *partially built* tool
+        # input: fields the model had already written survive, later ones are missing
+        # or empty. Nothing about that partial object looks wrong to the caller, so
+        # rendering it reports a confident, incomplete answer — a gap analysis that
+        # found ten issues comes back showing none. Fail loudly instead.
+        if resp.stop_reason == "max_tokens":
+            st.error(
+                "The AI ran out of room before finishing its response, so the result would "
+                "have been incomplete and was discarded rather than shown. Try again with a "
+                "shorter document, or select fewer documents at once."
+            )
+            return None
         for block in resp.content:
             if block.type == "tool_use" and block.name == tool_name:
                 return block.input
@@ -2030,7 +2035,7 @@ def ba_module():
             else:
                 proj["extracted_text"] = combined_text
                 proj["last_notes"] = notes or ""
-                with st.spinner("Cross-referencing against requirements quality standards..."):
+                with st.spinner("Analyzing requirements for gaps..."):
                     result = analyze_gaps(combined_text, notes=notes)
                 if result:
                     proj["gap_analysis"] = result
@@ -2038,17 +2043,14 @@ def ba_module():
         result = proj.get("gap_analysis")
         if result:
             n_open = len(result.get("open_questions", []))
-            st.success(f"Analysis complete. Found {n_open} open item(s) for stakeholder follow-up.")
+            st.success(f"Analysis complete. Found {n_open} possible gap(s).")
             if proj.get("last_notes"):
                 st.caption(f"Notes accounted for: \"{proj['last_notes'][:200]}\"")
             if result.get("summary"):
                 st.caption(result["summary"])
-            st.metric(
-                label="Requirements Risk Score",
-                value=f"{result.get('risk_score', 0)}/100 ({result.get('risk_level', 'Unknown')})",
-            )
+            st.metric(label="Possible Gaps", value=n_open)
 
-            st.markdown("### Open Questions for Stakeholders")
+            st.markdown("### Possible Gaps")
             if n_open == 0:
                 st.info("No significant gaps detected in this content.")
             for q in result.get("open_questions", []):
