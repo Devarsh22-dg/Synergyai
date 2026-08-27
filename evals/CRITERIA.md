@@ -45,6 +45,22 @@ Overall score for a run is the average of its criteria. A run **fails the gate**
   meeting understand what happened in a few seconds.
 - **Completeness** — every explicit action item in the fixture is captured.
 
+## generate_change_impact (Change Request Impact Analysis)
+
+- **Groundedness** — every affected requirement cited actually exists in the
+  provided project context, quoted or identified accurately. No invented
+  requirement IDs, and no requirement listed as affected that the change
+  doesn't actually touch (false positives count against this).
+- **Coverage** — the requirements a human BA would flag as affected are all
+  identified, including indirect ones (audit logging, security/compliance
+  constraints), not just the single most obvious match.
+- **New-scope detection** — where the change introduces something with no
+  existing requirement behind it, that's called out as new scope rather than
+  silently folded into an existing requirement.
+- **Impact calibration** — the stated impact level is proportionate to what the
+  change actually does, and recommended actions are concrete enough for a BA to
+  act on.
+
 ## Adding a new function's criteria
 
 Copy one of the sections above, swap in what actually matters for that

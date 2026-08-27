@@ -28,6 +28,17 @@ REPORT_FILE = EVALS_DIR / "latest_report.md"
 LOW_SCORE_THRESHOLD = 3.0      # below this, a run is "concerning"
 REPEAT_STREAK_TO_PROMOTE = 3   # this many concerning runs in a row -> LEARNED.md
 
+# Functions a fixture is allowed to target. Single source of truth: both
+# run_target_function() and the --dry-run check read this, so a fixture pointing
+# at an unwired function fails during the dry run rather than at 07:00 UTC
+# halfway through a real, API-consuming run.
+SUPPORTED_FUNCTIONS = (
+    "analyze_gaps",
+    "generate_stories",
+    "process_meeting",
+    "generate_change_impact",
+)
+
 JUDGE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -90,10 +101,16 @@ def run_target_function(app, fixture):
         return app.generate_stories(fixture["input_text"])
     elif fn == "process_meeting":
         return app.process_meeting(fixture["input_text"])
+    elif fn == "generate_change_impact":
+        # input_text is the change request; context_text is the existing project
+        # content it's assessed against (the function handles an empty context).
+        return app.generate_change_impact(
+            fixture["input_text"], fixture.get("context_text", "")
+        )
     else:
         raise ValueError(
             f"Fixture '{fixture['_path']}' targets unknown function '{fn}'. "
-            "Add a branch in run_target_function() for it, matching CRITERIA.md."
+            "Add a branch here and list it in SUPPORTED_FUNCTIONS, matching CRITERIA.md."
         )
 
 
@@ -113,6 +130,16 @@ def judge_output(app, fixture, output):
         f"Seeded issues this fixture is designed to surface (empty list if none specified):\n"
         f"{json.dumps(fixture.get('seeded_issues', []), indent=2)}\n\n"
         f"Input given to the function:\n{fixture['input_text']}\n\n"
+    )
+    # Some functions are assessed against existing project content as well as their
+    # primary input (change impact, for one). Without it the judge can't tell a
+    # grounded reference from an invented one, so groundedness would be unscoreable.
+    if fixture.get("context_text", "").strip():
+        user_prompt += (
+            "Existing project content the function was given as context:\n"
+            f"{fixture['context_text']}\n\n"
+        )
+    user_prompt += (
         f"---\nActual output produced by the function:\n{json.dumps(output, indent=2, default=str)}\n\n"
         "Score this output against the criteria for its function."
     )
@@ -210,8 +237,9 @@ def main():
     if args.dry_run:
         for fixture in fixtures:
             assert "input_text" in fixture and fixture["input_text"].strip(), f"Empty input_text in {fixture['_path']}"
-            assert fixture["function"] in ("analyze_gaps", "generate_stories", "process_meeting"), (
-                f"Unknown function '{fixture['function']}' in {fixture['_path']}"
+            assert fixture["function"] in SUPPORTED_FUNCTIONS, (
+                f"Unknown function '{fixture['function']}' in {fixture['_path']} — "
+                f"add a branch in run_target_function() and list it in SUPPORTED_FUNCTIONS."
             )
         print("Dry run OK — shim imports cleanly, fixtures well-formed, no API calls made.")
         return

@@ -52,6 +52,24 @@ credential to enter on your behalf.
    `description`, `input_text`, and (recommended) `seeded_issues` — specific
    problems planted in the input that a good run should catch. This is what
    makes the eval actually test something, not just "did it return JSON."
-3. Add a branch for the function in `run_target_function()` in `run_evals.py`
-   if it's not `analyze_gaps`, `generate_stories`, or `process_meeting`.
+3. If the function isn't already in `SUPPORTED_FUNCTIONS` in `run_evals.py`,
+   add it there **and** add a matching branch in `run_target_function()`.
+   Both read the same constant, so the dry run will tell you if you miss one.
 4. `python3 evals/run_evals.py --dry-run` to confirm it loads before it runs for real.
+
+A fixture may also set `context_text` for functions assessed against existing
+project content (e.g. `generate_change_impact`). When present it's passed to the
+function and shown to the judge, so groundedness can actually be scored.
+
+## Scenario fixtures
+
+Fixtures prefixed `harborview_` are one connected fictional scenario — a
+healthcare patient-referral portal — spanning all four functions with shared
+REQ-IDs, so a regression can be seen across the whole BA workflow rather than in
+one isolated function. The source `.docx`/`.pptx` documents they were extracted
+from are kept outside the repo; the fixtures hold the extracted text.
+
+Note these fixtures deliberately use *harder* variants of those documents: the
+originals contain their own "Open Questions" and "Impacted Requirements"
+sections, which would hand the model the answer key. Those sections are stripped
+here so the eval measures whether the tool actually finds the seeded issues.
