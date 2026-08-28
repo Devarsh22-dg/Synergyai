@@ -57,18 +57,19 @@ only once it is actually decided.
   — more than a one-line change, left for a night with room to verify the
   export path too.
 
-- **Consider an in-app Test Matrix / QA module** (raised 2026-08-28, from an
-  interactive planning session, not the nightly routine). A one-week manual
-  QA pass started this date using a standalone "ScopeForge Test Matrix"
-  artifact — use cases and test cases for every module, with pass/fail
-  tracking saved to the tester's browser. Devarsh floated building an
-  equivalent tool *inside the application itself* as a permanent QA/testing
-  section, rather than a one-off external doc. Recommendation on the table:
-  use the external version for the full test week first — if it holds up
-  fine, an in-app module isn't worth the added surface area; if it proves
-  genuinely limiting (e.g. more than one tester, or wanting coverage tracked
-  against live app/project data), that's the signal to build it in-app.
-  Revisit after the freeze, when work on the app resumes.
+- **Explore a standalone, sellable AI test-matrix product** (raised
+  2026-08-28, interactive planning session, not the nightly routine;
+  corrected same day — first logged this as "build an in-app QA module for
+  ScopeForge," which was a misread of what was actually said). While kicking
+  off a one-week manual QA pass, a one-off "ScopeForge Test Matrix" artifact
+  was generated as internal tooling: reading the actual app code (not specs)
+  to produce use cases, detailed test cases, and a trackable pass/fail
+  matrix. Devarsh's actual idea is that *the tool that generates artifacts
+  like this* — pointed at a client's codebase — might be sellable on its
+  own, as a separate product/offering, independent of ScopeForge's BA
+  niche. Very early conversation, no direction chosen (feature vs. spinoff
+  vs. consulting-accelerator angle all still open, see the same day's
+  session for the first pass at this). Revisit after the freeze.
 
 ---
 
