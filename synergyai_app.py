@@ -66,7 +66,7 @@ CHATBOT_SYSTEM_PROMPT = (
     "workflows. Keep answers practical and concise (a few short paragraphs or a brief list). "
     "If a question doesn't relate to those domains, answer briefly and steer back to how "
     "ScopeForge's modules (Elicitation Analysis, Documentation Generator, Story Creator, "
-    "Meeting Actionizer) might help."
+    "Meeting Actionizer, Traceability & Change Impact) might help."
 )
 
 DOC_TYPE_CODES = {
@@ -602,7 +602,13 @@ def call_text(system, user_prompt, max_tokens=1500, model=None):
             system=system,
             messages=[{"role": "user", "content": user_prompt}],
         )
-        return "".join(block.text for block in resp.content if block.type == "text")
+        text = "".join(block.text for block in resp.content if block.type == "text")
+        if resp.stop_reason == "max_tokens":
+            st.warning(
+                "The AI's response was cut off before it finished, so it may end "
+                "mid-sentence — try again with a shorter source document or a narrower request."
+            )
+        return text
     except Exception as e:
         st.error(f"AI request failed: {e}")
         return None
@@ -617,7 +623,10 @@ def call_chat(system, messages, max_tokens=800, model=None):
             system=system,
             messages=messages,
         )
-        return "".join(block.text for block in resp.content if block.type == "text")
+        text = "".join(block.text for block in resp.content if block.type == "text")
+        if resp.stop_reason == "max_tokens":
+            st.warning("ScopeBot's reply was cut off before it finished — try asking for a shorter answer.")
+        return text
     except Exception as e:
         st.error(f"AI request failed: {e}")
         return None
@@ -1297,7 +1306,7 @@ def analyze_gaps(text, notes=None):
         "non-functional requirements (performance, security, availability, etc.), stakeholder "
         "conflicts, and scope risks. Be specific and ground every finding in something actually "
         "present (or notably absent) in the text — do not invent details. If the text is sparse, "
-        "it's fine to return fewer findings and a lower risk score."
+        "it's fine to return fewer findings."
     ) + FORMATTING_GUIDANCE
     user_prompt = f"Analyze the following content:\n\n{truncated_text}"
     if notes and notes.strip():
@@ -1912,6 +1921,9 @@ def ba_module():
             items = result.get("action_items", [])
             if items:
                 action_df = pd.DataFrame(items)
+                action_df = action_df.rename(columns={
+                    "action": "Action", "owner": "Owner", "due_date": "Due Date",
+                })
                 st.dataframe(action_df, use_container_width=True)
                 dl1, dl2 = st.columns(2)
                 with dl1:
