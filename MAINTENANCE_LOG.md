@@ -57,6 +57,19 @@ only once it is actually decided.
   — more than a one-line change, left for a night with room to verify the
   export path too.
 
+- **Consider an in-app Test Matrix / QA module** (raised 2026-08-28, from an
+  interactive planning session, not the nightly routine). A one-week manual
+  QA pass started this date using a standalone "ScopeForge Test Matrix"
+  artifact — use cases and test cases for every module, with pass/fail
+  tracking saved to the tester's browser. Devarsh floated building an
+  equivalent tool *inside the application itself* as a permanent QA/testing
+  section, rather than a one-off external doc. Recommendation on the table:
+  use the external version for the full test week first — if it holds up
+  fine, an in-app module isn't worth the added surface area; if it proves
+  genuinely limiting (e.g. more than one tester, or wanting coverage tracked
+  against live app/project data), that's the signal to build it in-app.
+  Revisit after the freeze, when work on the app resumes.
+
 ---
 
 ## 2026-08-28
