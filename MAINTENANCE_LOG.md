@@ -30,7 +30,64 @@ only once it is actually decided.
   tool access to the app's own functions — a real design change, not a nightly
   fix, so it needs a decision on scope before anything is built.
 
+- **auth.py's CAPABILITIES list references a removed "risk score" field**
+  (raised 2026-08-28). Line 33's Elicitation Analysis description tells new
+  users results come "flagged with a risk score," but risk score was removed
+  from the gap-analysis schema on 2026-08-27 and replaced with a gap count
+  (see the 2026-08-27 entry below). auth.py is permanently off-limits to the
+  automated routine, so this stale copy needs a human edit.
+
+- **`call_structured_multimodal` (image descriptions) doesn't warn on a
+  truncated response** (raised 2026-08-28). `call_text` and `call_chat` were
+  brought in line with `call_structured`'s truncation check tonight; this
+  third call site still has none. Left alone deliberately: its docstring
+  frames image description as a "bonus signal" that already silently returns
+  `[]` on failure, so it's a real open question whether a truncation warning
+  fits that intentional silent-degrade design or is just noise — needs a call
+  on whether to align it with the other two.
+
+- **User Stories table shows raw dict keys instead of Title Case headers,
+  unlike every other generated table** (raised 2026-08-28). The Meeting
+  Action Items table had the identical issue and was fixed tonight, but the
+  Stories table's `edited_df` is also fed into `generate_test_cases()` via
+  `.to_dict("records")`, which reads lowercase keys (`requirement`,
+  `user_story`, `acceptance_criteria`), and is used as-is for the Excel/CSV
+  exports. A safe fix needs a separate display copy rather than an in-place
+  rename, so downstream test-case generation and the exports aren't affected
+  — more than a one-line change, left for a night with room to verify the
+  export path too.
+
 ---
+
+## 2026-08-28
+
+**Committed**
+
+- `d0e8ecc` Remove stale README reference to deleted email-verification setup
+- `ff5ca84` Warn on truncated AI text output; fix stale copy
+
+**Worth knowing**
+
+- `ff5ca84` extends last night's truncation fix (`c2aaa1b`, which covered
+  `call_structured`) to the two remaining plain-text call sites, `call_text`
+  and `call_chat`. `call_text` backs the Documentation Generator, so a draft
+  cut off at the token ceiling was previously rendered and offered for
+  download with no indication it was incomplete — same bug class as last
+  night, different call site. Unlike `call_structured`, which discards a
+  truncated result outright (a partial JSON object misrepresents
+  completeness), these two now warn but still return the partial text, since
+  discarding a cut-off draft or chat reply would throw away something the
+  user can still read and salvage.
+- The same commit also removed a dangling "risk score" mention in
+  `analyze_gaps`'s system prompt (schema no longer has that field, per
+  2026-08-27), added the missing "Traceability & Change Impact" module to
+  ScopeBot's system prompt (it only named 4 of the app's 5 tabs), and gave
+  the Meeting Action Items table the same column-rename treatment every
+  other generated table already gets.
+- Full review this pass covered synergyai_app.py end to end and
+  requirements.txt against actual imports; no drift found there. Three
+  things came up that looked at first like tonight's fixes but weren't safe
+  to act on unilaterally — see the new entries above in Open items.
 
 ## 2026-08-27
 
