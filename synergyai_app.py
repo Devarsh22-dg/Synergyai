@@ -1,6 +1,7 @@
 import os
 import io
 import re
+import html
 import base64
 import socket
 import ipaddress
@@ -1627,7 +1628,7 @@ def chat_with_bot(history):
 # --- Role-Specific Functions ---
 
 def render_dashboard(proj, cp):
-    section_header("BA Dashboard", f"Summary view for {cp} in this session.")
+    section_header("BA Dashboard", f"Summary view for {html.escape(cp)} in this session.")
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("User Stories Drafted", proj.get("stories_drafted", 0))
@@ -1687,7 +1688,7 @@ def ba_module():
 
     # --- Tab 0: Project & Documents ---
     with tab0:
-        section_header("Project Information & Document Repository", f"Active project: {cp}")
+        section_header("Project Information & Document Repository", f"Active project: {html.escape(cp)}")
 
         col1, col2 = st.columns(2)
         with col1:
