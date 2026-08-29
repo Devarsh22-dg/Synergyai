@@ -2140,7 +2140,7 @@ def ba_module():
 
         user_suggestion = st.text_area(
             "Provide specific instructions or focus areas:",
-            "e.g., Ensure the regulatory compliance section is highly detailed.",
+            placeholder="e.g., Ensure the regulatory compliance section is highly detailed.",
             key=f"doc_suggestion_{cp}",
         )
 
