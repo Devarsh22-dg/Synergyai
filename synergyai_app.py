@@ -992,7 +992,7 @@ def _assert_safe_archive(uploaded_file, ext):
     try:
         with zipfile.ZipFile(uploaded_file) as zf:
             total = sum(info.file_size for info in zf.infolist())
-    except zipfile.BadZipFile:
+    except (zipfile.BadZipFile, OSError):
         raise ValueError(
             f"This .{ext} file isn't a readable Office document — it may be corrupted."
         ) from None
@@ -1501,8 +1501,8 @@ def _label_overlap(a, b):
     Three separate AI calls (stories, test cases, prioritization) each phrase the same
     underlying requirement in their own words — exact/substring string matching misses
     most real links, so this compares word sets instead of characters."""
-    a_words = set(re.findall(r"[a-z0-9]+", a.lower()))
-    b_words = set(re.findall(r"[a-z0-9]+", b.lower()))
+    a_words = set(re.findall(r"[a-z0-9]+", (a or "").lower()))
+    b_words = set(re.findall(r"[a-z0-9]+", (b or "").lower()))
     if not a_words or not b_words:
         return 0.0
     return len(a_words & b_words) / min(len(a_words), len(b_words))
@@ -1864,6 +1864,7 @@ def ba_module():
                     gl_df = gl_df.rename(columns={
                         "term": "Term", "definition": "Definition", "source_context": "Source Context",
                     })
+                    gl_df = gl_df.reindex(columns=["Term", "Definition", "Source Context"], fill_value="")
                     gl_df = gl_df.sort_values("Term")
                     edited_gl_df = st.data_editor(gl_df, use_container_width=True, num_rows="dynamic", key=f"glossary_editor_{cp}")
 
@@ -2091,6 +2092,7 @@ def ba_module():
                 pr_df = pr_df.rename(columns={
                     "requirement": "Requirement", "moscow_category": "MoSCoW", "rationale": "Rationale",
                 })
+                pr_df = pr_df.reindex(columns=["Requirement", "MoSCoW", "Rationale"], fill_value="")
                 category_order = {"Must Have": 0, "Should Have": 1, "Could Have": 2, "Won't Have": 3}
                 pr_df["_sort"] = pr_df["MoSCoW"].map(category_order).fillna(4)
                 pr_df = pr_df.sort_values("_sort").drop(columns="_sort")
