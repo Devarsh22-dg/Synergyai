@@ -71,7 +71,117 @@ only once it is actually decided.
   vs. consulting-accelerator angle all still open, see the same day's
   session for the first pass at this). Revisit after the freeze.
 
+- **Nightly Evals GitHub Action has been failing every single night since
+  2026-08-19, and still is** (raised 2026-08-29). Every scheduled run from
+  #2 (2026-08-19) through last night's #27 (2026-08-28) shows
+  `conclusion: failure`, including two nights *after* the 2026-08-26 commit
+  (`7eefbd0`, "Revert the custom http_client — it broke production on newer
+  SDKs") that was believed to have closed this out. Last night's actual
+  job log: every one of the 7 fixtures failed with
+  `[st.error] AI request failed: Connection error.` — the exact same
+  symptom chased on 2026-08-18 through three different diagnoses (IPv6
+  routing, a malformed secret value, an httpx/httpx2 SDK mismatch). The
+  `ANTHROPIC_API_KEY` secret is confirmed present (masked but non-empty in
+  the job env), so either the "malformed secret" fix didn't fully take, or
+  the connection failure has a different/additional cause specific to the
+  GitHub Actions network path that hasn't been isolated yet. Net effect:
+  **no eval run has actually scored a fixture since 2026-08-18**, and
+  `evals/latest_report.md` / `LEARNED.md` are silently stale (the
+  "Commit results" step is skipped whenever the harness step fails, so
+  nothing ever overwrites the old, artificially-clean report from before
+  the harness's own error-surfacing bug was fixed — see run #10's commit
+  message). This routine reads those files every night to decide what
+  counts as a confirmed AI-output regression; that signal has effectively
+  been dark for 11 nights. Needs Devarsh to check the actual secret value
+  and/or investigate connectivity from a GitHub Actions runner to
+  api.anthropic.com directly — not a nightly-routine fix, and given two
+  earlier "fixes" for this exact symptom already turned out wrong (one of
+  them broke production), a third guess isn't warranted without new
+  evidence.
+
+- **Raw exception text is shown directly to end users in several
+  `st.error`/`st.warning` calls** (raised 2026-08-29). E.g. `f"AI request
+  failed: {e}"` (four call sites: `call_text`, `call_chat`,
+  `call_structured`, `call_structured_multimodal`) and `f"Couldn't read
+  this file: {e}"` / `f"Couldn't reach this URL: {e}"`. For a tool heading
+  toward SOC2-relevant use, surfacing raw library/exception internals to
+  end users is worth a deliberate decision — there's a real tradeoff
+  (sanitizing also removes legitimate troubleshooting detail for the BA
+  using the tool), and it's six-plus call sites, not one narrow fix, so
+  left for Devarsh's judgment rather than an automated change.
+
+- **Every generated-table `pd.DataFrame(...).rename(...)` block implicitly
+  trusts that the AI's structured JSON matches the declared schema's
+  required fields** (raised 2026-08-29). Two concrete crash sites from
+  this pattern (Glossary, Prioritization tables) were fixed tonight by
+  adding the same `reindex(..., fill_value="")` guard every other table
+  already had; this is the broader pattern behind them. Anthropic's
+  tool-use does not strictly guarantee required fields are present, so any
+  of the remaining tables (action items, workshop agenda/questions,
+  stories) could in principle hit the same class of crash on a field the
+  model omits. Worth a shared "safe structured result" helper at some
+  point, but that's a refactor across many call sites, not a nightly fix.
+
 ---
+
+## 2026-08-29
+
+**Committed**
+
+- `437f771` Escape project name before rendering as HTML in section headers
+- `eb53396` Fix example text being sent to AI as a real instruction
+- `6b80036` Guard against malformed AI fields and unreadable archives crashing the app
+
+**Worth knowing**
+
+- `437f771` is a real (if low-severity) XSS fix: `section_header()` renders
+  its `title`/`subtitle` arguments straight into `st.markdown(...,
+  unsafe_allow_html=True)`, and two call sites interpolated the current
+  project name — free text from an unvalidated "New Project Name" field —
+  into that HTML. A project named e.g. `<img src=x onerror=...>` would
+  execute as HTML wherever that project's name is shown again. Checked all
+  6 `unsafe_allow_html=True` sites in the file; these were the only two
+  that interpolate user-controlled data, so the fix is `html.escape()` at
+  just those two spots rather than a change to `section_header()` itself.
+  Session data only (no shared/multi-user state), so impact is scoped to
+  self-XSS in the acting user's own session — still worth closing given
+  the app's SOC2-relevant direction.
+- `eb53396` was a genuine, silent bug: `st.text_area()`'s second positional
+  argument is `value` (a real default), not placeholder text. The
+  Documentation Generator's "special instructions" box passed its example
+  text positionally, so every draft generated without the user manually
+  clearing the box first sent "e.g., Ensure the regulatory compliance
+  section is highly detailed." to the AI as an actual instruction — every
+  sibling instructions box elsewhere in the file correctly uses
+  `placeholder=`, which is how this stood out.
+- `6b80036` bundles three unrelated small crash-guards found in the same
+  pass, all the same failure class as recent nights: code trusting
+  AI-returned JSON shape or upload bytes more strictly than the schema
+  actually guarantees. None of these were reachable via the eval fixtures
+  (which is why the eval loop hasn't caught them) — they need a null
+  field, a missing field, or a malformed archive to trigger.
+- Did NOT act on a fourth candidate from tonight's review:
+  `call_structured_multimodal` not discarding a max-tokens-truncated
+  result. This is the same issue already sitting in Open items (raised
+  2026-08-28) — re-reading it tonight didn't change the open question
+  (whether a truncation check fits the function's intentional
+  silent-degrade design), so it's left as-is rather than re-raised or
+  acted on unilaterally.
+- Full pass tonight covered synergyai_app.py end to end (read via a
+  background review pass, then independently verified line-by-line before
+  any fix) and requirements.txt against actual imports (no drift). Three
+  more things came up that looked plausible but weren't safe to act on
+  unilaterally — see the new entries above in Open items.
+- evals/latest_report.md (dated 2026-08-18) and evals/LEARNED.md (no open
+  entries) turned out to be stale and unreliable, not just quiet: checked
+  the actual GitHub Actions run history for `Nightly Evals` rather than
+  taking the files at face value, and found every scheduled run since
+  2026-08-19 has failed with the AI calls themselves erroring
+  (`Connection error`) — see the new Open items entry above for the full
+  timeline. So step 3 of tonight's process (checking LEARNED.md for
+  confirmed regressions) had nothing real to check against; that's a gap
+  worth Devarsh knowing about even though tonight's code fixes came from
+  direct code review, not the eval signal.
 
 ## 2026-08-28
 
