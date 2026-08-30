@@ -122,7 +122,106 @@ only once it is actually decided.
   model omits. Worth a shared "safe structured result" helper at some
   point, but that's a refactor across many call sites, not a nightly fix.
 
+- **Edits made in the Story / Test Case `st.data_editor` tables are never
+  written back to project state, so the RTM and Change Impact Analyzer
+  silently use the stale, pre-edit AI output** (raised 2026-08-30).
+  `proj["stories"]` is set once, at generation time (`synergyai_app.py`
+  around line 2291); the `story_editor`'s edited frame (`edited_df`,
+  ~line 2298) is used locally for exports and to build test cases but
+  never written back. `proj["test_cases"]` (~line 2319) has the same gap:
+  the `tc_editor`'s edited frame (`edited_tc_df`, ~line 2332) is likewise
+  never saved. `build_rtm_rows()` (~line 1521) and the Change Impact
+  Analyzer's context builder both read `proj["stories"]`/
+  `proj["test_cases"]` directly, so a BA who corrects a bad story or
+  deletes a wrong test case in the table, then builds the RTM or runs a
+  change-impact check, gets results based on the discarded version with
+  no indication anything was dropped. Not a one-line fix: the story table
+  is unrenamed (safe to write back as-is), but the test-case table is
+  rendered with Title-Case column headers, so writing `edited_tc_df` back
+  needs the same display-vs-storage split as the already-open "User
+  Stories table shows raw dict keys" item above, not a trivial patch.
+
+- **Six `generate_*` functions give no UI feedback when the AI validly
+  returns an empty list** (raised 2026-08-30). Data Dictionary
+  (`generate_data_dictionary`, line 1352, called ~2150), As-Is/To-Be
+  (~2157), Stories (`generate_stories`, line 1399, called ~2280), Test
+  Cases (`generate_test_cases`, line 1418, called ~2317), Glossary
+  (`generate_glossary`, line 1445, called ~1846), and Prioritization
+  (`generate_prioritization`, line 1463, called ~2079) all follow the
+  pattern `if <rows>: <save + counters>` with no `else` — a real API
+  failure and a legitimate "the AI found nothing here" response look
+  identical to the end user (screen unchanged, no message). `analyze_gaps`
+  already handles this correctly, showing `st.info("No significant gaps
+  detected...")` even for zero results. Fixing this cleanly touches 6
+  call sites and needs a wording/UX call (what should each of the six
+  empty-state messages say), so left for a decision rather than an
+  automated guess.
+
+- **Possible literal `"nan"` string injected into the test-case-generation
+  prompt from blank `data_editor` rows — unconfirmed** (raised
+  2026-08-30). `generate_test_cases()` (line 1418) builds prompt text via
+  `s.get('requirement') or ''` from the story table's edited records
+  (called at line 2317). The story table's `num_rows="dynamic"` lets a
+  user add a blank row; if Streamlit/pandas fills an unedited new cell in
+  an object column with `float('nan')` rather than `None`, `or ''` would
+  not catch it (`nan` is truthy) and the literal text `"nan"` would be
+  sent to the model as if it were real requirement text. Not verified
+  against the live widget — needs a quick manual check (add a blank row,
+  generate test cases, inspect the actual prompt/behavior) before deciding
+  whether a guard is needed.
+
 ---
+
+## 2026-08-30
+
+**Committed**
+
+- `2521c72` Trim project name before dedup/storage; cap image extraction at
+  MAX_IMAGES_PER_DOC
+
+**Worth knowing**
+
+- The project-name fix closes a real (if minor) bug: the New Project form
+  stripped the name only for the "is it empty" check, so a name with
+  incidental leading/trailing whitespace (e.g. pasted from another
+  document) bypassed the duplicate-name check and created a second,
+  visually-identical project that would never collide with future
+  dup-checks either, since the raw value was also what got stored as the
+  dict key.
+- The image-extraction fix is a memory/latency cleanup, not a behavior
+  change: `describe_images_with_vision()` already slices to the first
+  `MAX_IMAGES_PER_DOC` (8) images before sending anything to Claude, but
+  all three extractors (docx, PDF, pptx) were collecting *every* embedded
+  image into memory first regardless of that cap. A document within the
+  existing upload-size limits (20MB / 200MB decompressed) can legitimately
+  contain far more than 8 images — a scanned packet, an image-heavy slide
+  deck — so this was doing real, unbounded-ish work for output that was
+  always going to be discarded. Output is unchanged: still the first 8
+  images found, in the same order.
+- Full pass tonight covered `synergyai_app.py` end to end (background
+  review pass, then independently verified each finding — including exact
+  line numbers and surrounding logic — before deciding what was safe) and
+  `requirements.txt` against actual imports: no drift. `auth.py`, `db.py`,
+  `AUTH_ENABLED`, and `check_access()` were not touched or read beyond
+  confirming their locations, per standing instructions.
+- Checked the actual GitHub Actions run history for the Nightly Evals
+  workflow directly rather than trusting `evals/latest_report.md` (still
+  dated 2026-08-18) or `evals/LEARNED.md` (still no entries): last night's
+  scheduled run (#28, on `6722ed3`) also failed, same as every run since
+  2026-08-19. No new information beyond what's already in the standing
+  Open Items entry — status is unchanged, still needs Devarsh to check the
+  secret/connectivity directly.
+- Two smaller observations came up in review but weren't logged as open
+  items — deliberately, since neither needs a decision, just noting them:
+  `analyze_gaps()`'s free-typed "Additional Notes" field is appended to
+  the AI prompt after `truncate(text)` is applied to the document text, so
+  `MAX_CHARS` isn't a hard ceiling on that call's total prompt size
+  (low-risk since notes are operator-typed, not adversarial, and
+  realistically short); and large CSV/XLSX uploads are serialized to
+  AI-facing text via `pandas.DataFrame.to_string()`, which re-renders with
+  column alignment and can be noticeably larger/slower than the source
+  file for a wide or many-row sheet within the current 20MB cap — a
+  content-shaping decision, not something to change unilaterally.
 
 ## 2026-08-29
 
