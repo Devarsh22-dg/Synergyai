@@ -819,6 +819,8 @@ def extract_docx_with_formatting(uploaded_file, describe_images=True):
     if describe_images:
         image_bytes_list = []
         for rel in doc.part.rels.values():
+            if len(image_bytes_list) >= MAX_IMAGES_PER_DOC:
+                break
             if "image" in rel.reltype:
                 try:
                     image_bytes_list.append(rel.target_part.blob)
@@ -877,9 +879,13 @@ def extract_pdf_with_annotations(uploaded_file, describe_images=True):
     if describe_images:
         image_bytes_list = []
         for page in reader.pages:
+            if len(image_bytes_list) >= MAX_IMAGES_PER_DOC:
+                break
             try:
                 for img in page.images:
                     image_bytes_list.append(img.data)
+                    if len(image_bytes_list) >= MAX_IMAGES_PER_DOC:
+                        break
             except Exception:
                 continue
         if image_bytes_list:
@@ -923,10 +929,11 @@ def extract_pptx_with_formatting(uploaded_file, describe_images=True):
         slide_lines = [f"--- Slide {slide_num} ---"]
         for shape in _iter_pptx_shapes(slide.shapes):
             if shape.shape_type == 13:  # MSO_SHAPE_TYPE.PICTURE
-                try:
-                    image_bytes_list.append(shape.image.blob)
-                except Exception:
-                    pass
+                if len(image_bytes_list) < MAX_IMAGES_PER_DOC:
+                    try:
+                        image_bytes_list.append(shape.image.blob)
+                    except Exception:
+                        pass
                 continue
             if shape.has_table:
                 for row in shape.table.rows:
@@ -1712,7 +1719,8 @@ def ba_module():
             new_desc = st.text_area("Description (optional)", height=80)
             submitted = st.form_submit_button("Create Project")
             if submitted:
-                if not new_name.strip():
+                new_name = new_name.strip()
+                if not new_name:
                     st.warning("Give the project a name.")
                 elif new_name in st.session_state["projects"]:
                     st.warning("A project with this name already exists.")
