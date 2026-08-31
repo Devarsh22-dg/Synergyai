@@ -1044,7 +1044,11 @@ def extract_text_from_upload(uploaded_file):
         elif ext == "pptx":
             text = extract_pptx_with_formatting(uploaded_file)
         elif ext == "csv":
-            df = pd.read_csv(uploaded_file)
+            try:
+                df = pd.read_csv(uploaded_file)
+            except UnicodeDecodeError:
+                uploaded_file.seek(0)
+                df = pd.read_csv(uploaded_file, encoding="cp1252")
             text = df.to_string(index=False) if not df.empty else ""
         elif ext == "xlsx":
             xls = pd.ExcelFile(uploaded_file)
@@ -1491,7 +1495,7 @@ def generate_workshop_prep(project_description, focus_area, existing_context):
         "Base the questions on what's already known from the project description/context — probe "
         "specifically for what's missing or ambiguous, don't ask generic questions that the context "
         "already answers."
-    )
+    ) + FORMATTING_GUIDANCE
     user_prompt = (
         f"Project description:\n{project_description or '(none provided)'}\n\n"
         f"Workshop focus area:\n{focus_area or '(general requirements elicitation)'}\n\n"
@@ -1566,7 +1570,7 @@ def generate_change_impact(change_request_text, existing_context):
         "concrete next actions. Ground every affected item in something actually present in the "
         "existing content — don't invent requirements that aren't there. If nothing in the "
         "existing content is affected, say so and return an empty affected_requirements list."
-    )
+    ) + FORMATTING_GUIDANCE
     user_prompt = (
         f"Change request:\n{change_request_text}\n\n"
         f"Existing project requirements/stories/documentation:\n"
@@ -1970,6 +1974,7 @@ def ba_module():
                     )
                 if prep:
                     proj["workshop_prep"] = prep
+                    proj["workshop_prep_focus"] = focus_area
 
             prep = proj.get("workshop_prep")
             if prep:
@@ -1987,7 +1992,7 @@ def ba_module():
                     for q in prep.get("questions", []):
                         if q.get("category", "Other") == cat:
                             st.write(f"- {q.get('question', '')}")
-                prep_md = f"# Workshop Prep — {focus_area or cp}\n\n{prep.get('objectives', '')}\n\n## Agenda\n"
+                prep_md = f"# Workshop Prep — {proj.get('workshop_prep_focus', '') or cp}\n\n{prep.get('objectives', '')}\n\n## Agenda\n"
                 for a in prep.get("agenda", []):
                     prep_md += f"- **{a.get('topic', '')}** ({a.get('duration_minutes', '')} min) — {a.get('purpose', '')}\n"
                 prep_md += "\n## Questions\n"
