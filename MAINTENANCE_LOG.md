@@ -172,6 +172,74 @@ only once it is actually decided.
 
 ---
 
+## 2026-08-31
+
+**Committed**
+
+- `dbc875d` Add missing FORMATTING_GUIDANCE to two AI calls; fix stale
+  workshop-prep title; add CSV encoding fallback
+
+**Worth knowing**
+
+- `FORMATTING_GUIDANCE` (the constant that tells the model `**bold**` =
+  critical/non-negotiable, `~~strikethrough~~` = removed/historical, and a
+  "Reviewer Comments" section = stakeholder feedback) is appended to eight
+  of the ten functions that consume raw extracted document text; two —
+  `generate_workshop_prep` and `generate_change_impact` — were missing it,
+  even though both are fed `proj["extracted_text"]` verbatim (workshop
+  prep at line ~1969, change impact at line ~2413). A document with
+  struck-through legacy content could have had workshop questions or a
+  change-impact assessment built as if that removed content were still
+  live requirements. Fixed by appending the same constant, no new logic.
+- The Workshop Prep download's `.md` title read the live `focus_area`
+  text_input widget value, not the value actually used to generate the
+  content (`proj["workshop_prep"]` stores the result but never the focus
+  text it was generated from). Editing the focus box after generating,
+  then downloading without regenerating, produced a downloaded document
+  whose title didn't match its body. Fixed the same way the file already
+  handles this for the Documentation Generator (`proj["last_doc_type"]`
+  stored alongside `proj["last_doc_draft"]` specifically so the displayed
+  label can't drift from the live widget) — added `proj["workshop_prep_focus"]`
+  and read it back instead of the live widget.
+- CSV upload (`extract_text_from_upload`) had no encoding fallback,
+  unlike the `.txt` branch in the same function, which already handles
+  UTF-16 BOM, `utf-8-sig`, and a `cp1252` fallback. A CSV exported from
+  Excel with curly quotes, accented names, or currency symbols is
+  commonly `cp1252`/`latin-1`, and previously failed with a raw decode
+  error surfaced via the generic exception handler instead of just being
+  read. Added the same `try/except UnicodeDecodeError` → retry with
+  `cp1252` pattern the `.txt` branch already uses.
+- Full pass tonight: a background review agent read `synergyai_app.py`
+  end to end (explicitly excluding every item already sitting in Open
+  items above) and `requirements.txt` against actual imports — no drift
+  found there, and `streamlit-authenticator` being present but unimported
+  at module level is correct (it's used inside `auth.py`, which was not
+  read beyond confirming that). Every candidate finding was independently
+  re-verified against the actual file (line numbers, call sites, and the
+  existing `last_doc_type` precedent) before being fixed. `auth.py`,
+  `db.py`, `AUTH_ENABLED`, and `check_access()` were not touched or read.
+- One borderline item came up that wasn't logged as an open item since it
+  doesn't need a decision, just noting it: `extract_docx_with_formatting`
+  and `extract_pptx_with_formatting` both silently drop "Reviewer
+  Comments" extraction on any exception (~line 810-813) with no
+  user-facing warning. This mirrors the app's established "bonus signal,
+  degrade silently" design already used explicitly for image description
+  (documented in `describe_images_with_vision`'s docstring) — plausibly
+  intentional consistency rather than an oversight, just without an
+  explicit comment saying so at that specific spot. Not confident enough
+  either way to change it.
+- Checked the Nightly Evals GitHub Action run history directly (not
+  `evals/latest_report.md`, still dated 2026-08-18, or `evals/LEARNED.md`,
+  still no entries): last night's scheduled run (#29, on `85d37ab`) also
+  failed, same symptom as every run since 2026-08-19. No new information
+  — status on the standing Open items entry is unchanged.
+- `evals/run_evals.py --dry-run` and `python3 -m py_compile
+  synergyai_app.py` both required a working `requests`/`bs4`/`pandas`/etc.
+  install to run at all; this container had no packages installed, so
+  they were run inside an isolated venv (`pip install -r
+  requirements.txt`) built fresh for tonight's checks rather than into
+  system Python. Both passed cleanly before and after tonight's edit.
+
 ## 2026-08-30
 
 **Committed**
