@@ -157,20 +157,50 @@ only once it is actually decided.
   empty-state messages say), so left for a decision rather than an
   automated guess.
 
-- **Possible literal `"nan"` string injected into the test-case-generation
-  prompt from blank `data_editor` rows — unconfirmed** (raised
-  2026-08-30). `generate_test_cases()` (line 1418) builds prompt text via
-  `s.get('requirement') or ''` from the story table's edited records
-  (called at line 2317). The story table's `num_rows="dynamic"` lets a
-  user add a blank row; if Streamlit/pandas fills an unedited new cell in
-  an object column with `float('nan')` rather than `None`, `or ''` would
-  not catch it (`nan` is truthy) and the literal text `"nan"` would be
-  sent to the model as if it were real requirement text. Not verified
-  against the live widget — needs a quick manual check (add a blank row,
-  generate test cases, inspect the actual prompt/behavior) before deciding
-  whether a guard is needed.
-
 ---
+
+## 2026-09-01
+
+**Committed**
+
+- `a93099f` Guard generate_test_cases against NaN/None leaking into the AI
+  prompt as "nan"
+
+**Worth knowing**
+
+- Resolved the previously-unconfirmed "nan" open item (raised 2026-08-30)
+  rather than leaving it open again. The live Streamlit widget isn't
+  reachable from this container, so instead of guessing, verified the
+  underlying pandas mechanics directly: a DataFrame column with a blank
+  cell round-trips through `.to_dict("records")` as a real float `NaN` (or
+  `None`), and `s.get(k) or ''` doesn't catch that because `NaN` is truthy
+  in Python — `str(nan)` ("nan") would flow straight into the AI prompt.
+  Fixed `generate_test_cases()` by routing the three story fields through
+  `_blank_or_value()`, the same helper already used elsewhere in the file
+  for exactly this NaN-vs-real-value distinction (originally added for
+  Excel/Word cell values) — no new logic. Verified with a standalone
+  script, loading `synergyai_app.py` through evals' own `streamlit_shim`,
+  that a NaN/None story field now renders as an empty string in the built
+  prompt text instead of "nan". This closes the item without needing to
+  drive the actual `st.data_editor` widget in a browser: the fix is
+  correct regardless of whether Streamlit fills a blank cell with `NaN` or
+  `None`, since `_blank_or_value()` (via `pd.isna()`) treats both the same.
+- Checked the Nightly Evals GitHub Action run history directly (not
+  `evals/latest_report.md`, still dated 2026-08-18, or `evals/LEARNED.md`,
+  still no entries): last night's scheduled run (#30, on `2dde763`) also
+  failed, same symptom as every run since 2026-08-19. No new information —
+  status on the standing Open items entry is unchanged.
+- Full pass tonight read `synergyai_app.py` end to end directly (all
+  ~2570 lines) and checked `requirements.txt` against actual imports in
+  both `synergyai_app.py` and `auth.py` (imports only, not the rest of
+  `auth.py`) — no drift. Re-checked every `unsafe_allow_html=True` call
+  site for the 2026-08-29 XSS pattern (user-controlled text interpolated
+  into raw HTML) — the two fixed then are still the only two; every other
+  site passes only static strings. `auth.py`, `db.py`, `AUTH_ENABLED`, and
+  `check_access()` were not touched or read beyond confirming their
+  imports/locations. No other item looked both safe and self-contained
+  enough to act on tonight — everything else that came up either matched
+  an item already sitting in Open items above or wasn't confidently minor.
 
 ## 2026-08-31
 
