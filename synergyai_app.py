@@ -1423,10 +1423,15 @@ def generate_test_cases(stories):
     """Builds test cases from already-generated user stories/acceptance criteria."""
     story_lines = []
     for s in stories:
+        # A blank row added via the story table's data_editor (num_rows="dynamic")
+        # fills unedited cells with a real NaN/None, which `s.get(k) or ''` doesn't
+        # catch (NaN is truthy) — that would send the literal text "nan" to the
+        # model as if it were real requirement text. _blank_or_value already exists
+        # for this exact NaN-vs-real-value distinction (used for table exports).
         story_lines.append(
-            f"Requirement: {s.get('requirement') or ''}\n"
-            f"User Story: {s.get('user_story') or ''}\n"
-            f"Acceptance Criteria: {s.get('acceptance_criteria') or ''}"
+            f"Requirement: {_blank_or_value(s.get('requirement')) or ''}\n"
+            f"User Story: {_blank_or_value(s.get('user_story')) or ''}\n"
+            f"Acceptance Criteria: {_blank_or_value(s.get('acceptance_criteria')) or ''}"
         )
     source_text, was_truncated = truncate("\n\n".join(story_lines))
     if was_truncated:
