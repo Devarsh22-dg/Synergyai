@@ -163,7 +163,7 @@ only once it is actually decided.
 
 **Committed**
 
-- `<pending>` Add UTF-8 BOM to CSV downloads so Excel renders non-ASCII
+- `29afaac` Add UTF-8 BOM to CSV downloads so Excel renders non-ASCII
   content correctly
 
 **Worth knowing**
