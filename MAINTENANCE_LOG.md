@@ -159,6 +159,62 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-02
+
+**Committed**
+
+- `<pending>` Add UTF-8 BOM to CSV downloads so Excel renders non-ASCII
+  content correctly
+
+**Worth knowing**
+
+- All four `st.download_button(..., <df>.to_csv(index=False), ...,
+  mime="text/csv")` call sites (Meeting Action Items line 1955,
+  Prioritization line 2126, Backlog Stories line 2318, Test Cases line
+  2352) passed a plain `str` payload. Verified directly against the
+  pinned `streamlit==1.62.0` source
+  (`runtime/download_data_util.py::convert_data_to_bytes_and_infer_mime`):
+  a `str` payload is encoded via bare `.encode()` (UTF-8, no BOM); the
+  app's own `mime="text/csv"` argument is used as-is regardless of the
+  function's inferred mimetype, so switching to a `bytes` payload has no
+  other effect. Windows Excel opened by double-click decodes a BOM-less
+  CSV using the system codepage, not UTF-8, so any accented name, em
+  dash, or curly quote coming out of the AI (common in generated content)
+  would render as mojibake. Fixed by encoding with `utf-8-sig` instead of
+  plain `str`, at all four sites — the same encoding the app already
+  treats as correct on the upload side (2026-08-31 fix). Verified
+  standalone with non-ASCII sample data: the BOM is present and
+  `.decode("utf-8-sig")` round-trips to the original CSV text exactly.
+- Full pass tonight: a background review agent read `synergyai_app.py`
+  end to end (explicitly excluding every item already sitting in Open
+  items above and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports — no drift found. The CSV/BOM
+  finding above was independently re-verified (exact line numbers,
+  streamlit source, and a standalone encode/decode check) before being
+  fixed. Two borderline items came up that weren't logged as new open
+  items since neither needs a decision, just noting them: (1)
+  `build_docx_from_markdown` strips `**`/`*`/`~~` markers via plain
+  string replacement rather than applying real bold/italic/strikethrough
+  Word runs, so emphasis and struck-through content are visually
+  indistinguishable in the exported .docx — real fidelity gap, but fixing
+  it means run-level formatting logic, not a one-line change; (2) several
+  more `generate_*` functions' free-typed suggestion/focus fields
+  (`generate_document`, `generate_data_dictionary`, `generate_asis_tobe`,
+  `generate_glossary`, `generate_prioritization`, `generate_workshop_prep`)
+  aren't routed through `truncate()`/`MAX_CHARS`, same class of thing
+  already discussed and left alone for `analyze_gaps`'s "Additional
+  Notes" field on 2026-08-30 (operator-typed, realistically short) — just
+  noting it's not only that one call site.
+- Checked the Nightly Evals GitHub Action run history directly (not
+  `evals/latest_report.md`, still dated 2026-08-18, or `evals/LEARNED.md`,
+  still no entries): last night's scheduled run (#31, on `4a05258`) also
+  failed, same `[st.error] AI request failed: Connection error.` symptom
+  on every fixture as every run since 2026-08-19. No new information —
+  status on the standing Open items entry is unchanged.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming their locations, per standing
+  instructions.
+
 ## 2026-09-01
 
 **Committed**

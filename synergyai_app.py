@@ -1952,7 +1952,7 @@ def ba_module():
                     )
                 with dl2:
                     st.download_button(
-                        "Download as CSV (.csv)", action_df.to_csv(index=False),
+                        "Download as CSV (.csv)", action_df.to_csv(index=False).encode("utf-8-sig"),
                         file_name="meeting_action_items.csv", mime="text/csv", key=f"meeting_csv_{cp}",
                     )
             else:
@@ -2123,7 +2123,7 @@ def ba_module():
                     )
                 with dl2:
                     st.download_button(
-                        "Download as CSV (.csv)", pr_df.to_csv(index=False),
+                        "Download as CSV (.csv)", pr_df.to_csv(index=False).encode("utf-8-sig"),
                         file_name="requirements_prioritization.csv", mime="text/csv", key=f"prio_csv_{cp}",
                     )
 
@@ -2315,7 +2315,7 @@ def ba_module():
                 )
             with dl2:
                 st.download_button(
-                    "Download as CSV — Jira/Azure DevOps import format (.csv)", edited_df.to_csv(index=False),
+                    "Download as CSV — Jira/Azure DevOps import format (.csv)", edited_df.to_csv(index=False).encode("utf-8-sig"),
                     file_name="backlog_stories.csv", mime="text/csv", key=f"story_csv_{cp}",
                 )
 
@@ -2349,7 +2349,7 @@ def ba_module():
                         )
                     with tdl2:
                         st.download_button(
-                            "Download as CSV (.csv)", edited_tc_df.to_csv(index=False),
+                            "Download as CSV (.csv)", edited_tc_df.to_csv(index=False).encode("utf-8-sig"),
                             file_name="test_cases.csv", mime="text/csv", key=f"tc_csv_{cp}",
                         )
                 else:
