@@ -693,15 +693,27 @@ def call_structured_multimodal(system, content_blocks, tool_name, tool_descripti
 MAX_CHARS = 15000
 MAX_IMAGES_PER_DOC = 8       # cap vision calls per document — keeps cost/latency reasonable
 IMAGE_MAX_DIMENSION = 1200   # px, longest side — plenty for screenshots/diagrams, keeps payload small
+MAX_IMAGE_BYTES = 15 * 1024 * 1024  # per-embedded-image cap before PIL decodes it — a screenshot/
+                                     # diagram never needs to be this large; MAX_UNCOMPRESSED_BYTES
+                                     # only bounds the whole archive, not any single embedded image
 
 
 def _prepare_image_for_vision(image_bytes):
     """Decodes arbitrary image bytes, downsizes if needed, and re-encodes as JPEG base64
     for the vision API. Returns None if the bytes aren't a readable image (e.g. an EMF/WMF
-    vector graphic that PIL can't open, or a corrupt embed) rather than raising."""
+    vector graphic that PIL can't open, or a corrupt embed) or exceed MAX_IMAGE_BYTES,
+    rather than raising."""
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        return None
     try:
         img = Image.open(io.BytesIO(image_bytes))
-        img = img.convert("RGB")
+        if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+            rgba = img.convert("RGBA")
+            background = Image.new("RGB", rgba.size, "white")
+            background.paste(rgba, mask=rgba.split()[-1])
+            img = background
+        else:
+            img = img.convert("RGB")
         if max(img.size) > IMAGE_MAX_DIMENSION:
             img.thumbnail((IMAGE_MAX_DIMENSION, IMAGE_MAX_DIMENSION))
         buf = io.BytesIO()
@@ -753,8 +765,16 @@ def describe_images_with_vision(images, source_name):
     )
     if not result:
         return []
+    items = result.get("images", [])
+    # The schema asks the model for a 1-based image_number so entries can be matched back
+    # to the image they describe. Sort by it when it's a clean permutation of 1..len(items);
+    # otherwise fall back to the order the model returned them in, since a missing/duplicate
+    # number is more likely a minor model slip than a signal the whole batch is untrustworthy.
+    numbers = [item.get("image_number") for item in items]
+    if all(isinstance(n, int) for n in numbers) and sorted(numbers) == list(range(1, len(items) + 1)):
+        items = sorted(items, key=lambda item: item["image_number"])
     descriptions = []
-    for item in result.get("images", []):
+    for item in items:
         descriptions.append(f"[{item.get('content_type', 'Image')}] {item.get('description', '')}")
     return descriptions
 
