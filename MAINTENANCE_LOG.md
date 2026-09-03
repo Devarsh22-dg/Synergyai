@@ -159,6 +159,81 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-03
+
+**Committed**
+
+- `f45beb0` Cap per-image byte size before vision decode; fix alpha
+  flattening and image ordering
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end (all 2572
+  lines, explicitly excluding every item already sitting in Open items
+  above and everything already fixed in prior dated entries). Four
+  candidate findings came back; three were verified and fixed, one was
+  judged too trivial to act on or log.
+- **Fixed — missing per-image size cap.** `MAX_UNCOMPRESSED_BYTES` (200MB)
+  only bounds the *whole* zip-backed archive's declared uncompressed size
+  (`_assert_safe_archive`); it does nothing to stop one single embedded
+  image from being close to that entire budget. `_prepare_image_for_vision`
+  (line ~698) had no independent check before handing bytes to
+  `Image.open()`. Added a 15MB `MAX_IMAGE_BYTES` check at the top of that
+  function, using the same silent-skip-to-`None` path already used for an
+  unreadable image — no new failure mode, no downstream change. Note for
+  context: PIL's own default `Image.MAX_IMAGE_PIXELS` guard already catches
+  true pixel-count decompression bombs (raises `DecompressionBombError`,
+  caught by the function's existing broad `except Exception`), so this
+  fix closes the *byte-size* gap specifically — a large-but-legal image
+  well under PIL's pixel-count ceiling could still be tens or hundreds of
+  MB and force an expensive decode with nothing stopping it before now.
+- **Fixed — alpha channel silently dropped, not flattened.**
+  `img.convert("RGB")` on an RGBA/transparent source (same function)
+  discards alpha directly rather than compositing onto a background first,
+  so a transparent PNG screenshot/diagram embedded in a doc could reach
+  Claude vision with black or undefined-color regions where it should read
+  as blank — degrading description quality on exactly the kind of content
+  (UI screenshots, diagrams) this pipeline exists to read accurately. Now
+  composites onto a white background before converting, only when the
+  source actually has an alpha channel (RGBA/LA/P-with-transparency);
+  plain RGB sources are untouched. Verified standalone: a fully-transparent
+  RGBA test image now round-trips to a white pixel instead of black.
+- **Fixed — image descriptions matched to images by position, not the
+  model's own `image_number`.** `IMAGE_ANALYSIS_SCHEMA` requires the model
+  to return a 1-based `image_number` per entry specifically so answers can
+  be matched back to the image sent, but `describe_images_with_vision`
+  (line ~756) never read that field — it just iterated the returned array
+  in order and re-numbered by position. If the model's array order ever
+  diverged from input order for even one image, the description attributed
+  to "image 3" would silently be describing a different image, with
+  nothing to catch it. Now sorts by `image_number` when it's a clean
+  1..n permutation of the batch; falls back to original order otherwise
+  (a missing/duplicate number is more likely a minor model slip than a
+  sign the whole batch is untrustworthy). Verified standalone with an
+  out-of-order two-item list.
+- **Not acted on, not logged as an open item** — too trivial to need a
+  decision, just noting it: `extract_text_from_upload` (line ~1019) derives
+  the extension as `name.split(".")[-1]`, so a file with no extension at
+  all (some OS file pickers allow bypassing the uploader's `type=[...]`
+  filter via "All files") produces a confusing error like
+  `Unsupported file type: .myfile` — a stray dot prepended to the whole
+  filename rather than a real extension. Narrow, rare, cosmetic-only.
+- All three fixes verified with a standalone script loading
+  `synergyai_app.py` through evals' own `streamlit_shim` (oversized bytes
+  rejected, a normal RGB image still round-trips, a transparent RGBA image
+  composites to white) before committing, in addition to
+  `python3 -m py_compile` and `evals/run_evals.py --dry-run`.
+- Checked the Nightly Evals GitHub Action run history directly (not
+  `evals/latest_report.md`, still dated 2026-08-18, or `evals/LEARNED.md`,
+  still no entries): last night's scheduled run (#32, on `30ed1fb`) also
+  failed — same shape as every run since 2026-08-19 (`Run eval harness`
+  step fails, `Commit results` step skipped). No new information — status
+  on the standing Open items entry is unchanged.
+- `evals/LEARNED.md` has no entries (open or closed) — nothing to act on
+  or close there tonight.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read, per standing instructions.
+
 ## 2026-09-02
 
 **Committed**
