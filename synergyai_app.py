@@ -881,8 +881,6 @@ def extract_pdf_with_annotations(uploaded_file, describe_images=True):
             )
     pages = [page.extract_text() or "" for page in reader.pages]
     text = "\n".join(pages)
-    if not text.strip():
-        st.warning("No extractable text found in this PDF — it may be a scanned/image-only document.")
 
     annotation_lines = []
     for page in reader.pages:
@@ -914,6 +912,9 @@ def extract_pdf_with_annotations(uploaded_file, describe_images=True):
             if descriptions:
                 desc_lines = [f"{i+1}. {d}" for i, d in enumerate(descriptions)]
                 text += "\n\n--- Images/Screenshots Found in Document (AI-described) ---\n" + "\n".join(desc_lines)
+
+    if not text.strip():
+        st.warning("No extractable text found in this PDF — it may be a scanned/image-only document.")
 
     return text
 
