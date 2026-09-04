@@ -159,6 +159,69 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-04
+
+**Committed**
+
+- `3423252` Fix header-only CSV/XLSX uploads being treated as empty
+- `6f5bdf5` Move PDF "no extractable text" warning to after annotations/images
+  are appended
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end (explicitly
+  excluding every item already sitting in Open items above and everything
+  already fixed in prior dated entries) and `requirements.txt` against actual
+  imports — no drift. Two candidate findings came back; both were
+  independently re-verified against the actual file and standalone test
+  scripts before being fixed. One initial candidate (stale `st.multiselect`
+  selections after a document is removed) was checked against the pinned
+  `streamlit==1.62.0` source and ruled out — the widget already filters stale
+  values out of session state rather than raising, so it was never a bug.
+- **Fixed — header-only CSV/XLSX uploads discarded their column names.**
+  `extract_text_from_upload` (line ~1072/1078) used `df.empty` to decide
+  whether a CSV/XLSX upload had extractable text, but `df.empty` is `True`
+  whenever a DataFrame has zero *rows*, even if it has real column headers.
+  Verified directly against the pinned `pandas==3.0.5`: a CSV with a header
+  row and no data rows (e.g. `Name,Email,Phone\n`, the shape of a Data
+  Dictionary starter template a BA would plausibly upload) round-trips to
+  `df.empty == True`, so the header text was silently discarded and the
+  file reported as empty via a misleading "it may be empty" warning. Same
+  root cause for an XLSX sheet with only a header row. Fixed by checking
+  `len(df.columns) > 0` instead, at both call sites. Verified standalone
+  (loading the app through evals' own `streamlit_shim`) that: a header-only
+  CSV now keeps its column names in the extracted text; a genuinely empty
+  sheet (no header, no data — `len(df.columns) == 0`) still produces empty
+  text and still triggers the warning, so that path wasn't weakened; and a
+  normal data CSV/XLSX is byte-for-byte unaffected.
+- **Fixed — PDF "may be scanned/image-only" warning fired before
+  annotations/images were appended to the extracted text.**
+  `extract_pdf_with_annotations` (line ~884) checked `text.strip()` against
+  the raw page-text layer only, before reviewer-comment annotations (~897)
+  and vision-described images (~916) were appended to that same `text`
+  variable and returned. A scanned PDF with no text layer but with sticky-
+  note comments or embedded screenshots showed the "it may be a
+  scanned/image-only document" warning even though the function went on to
+  populate `text` with real, usable content from those sources — misleading
+  for exactly the kind of document (a scanned/annotated PDF) this pipeline
+  exists to handle. Moved the check to the end of the function, after every
+  source (page text, annotations, vision descriptions) has had a chance to
+  contribute. Verified standalone with a real pypdf-built PDF: a text-less
+  page carrying only a sticky-note annotation no longer triggers the
+  warning (the annotation content is genuinely present in the returned
+  text), while a truly empty page (no text, no annotations, no images)
+  still triggers it exactly as before.
+- Checked the Nightly Evals GitHub Action run history directly (not
+  `evals/latest_report.md`, still dated 2026-08-18, or `evals/LEARNED.md`,
+  still no entries): last night's scheduled run (#33, on `399e786`) also
+  failed, same shape as every run since 2026-08-19 (`Run eval harness` step
+  fails, `Commit results` step skipped). No new information — status on the
+  standing Open items entry is unchanged.
+- `evals/LEARNED.md` has no entries (open or closed) — nothing to act on or
+  close there tonight.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not touched
+  or read beyond confirming their locations, per standing instructions.
+
 ## 2026-09-03
 
 **Committed**
