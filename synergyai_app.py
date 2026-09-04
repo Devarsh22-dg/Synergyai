@@ -1069,13 +1069,13 @@ def extract_text_from_upload(uploaded_file):
             except UnicodeDecodeError:
                 uploaded_file.seek(0)
                 df = pd.read_csv(uploaded_file, encoding="cp1252")
-            text = df.to_string(index=False) if not df.empty else ""
+            text = df.to_string(index=False) if len(df.columns) > 0 else ""
         elif ext == "xlsx":
             xls = pd.ExcelFile(uploaded_file)
             parts = []
             for sheet in xls.sheet_names:
                 df = xls.parse(sheet)
-                if not df.empty:
+                if len(df.columns) > 0:
                     parts.append(f"--- Sheet: {sheet} ---\n{df.to_string(index=False)}")
             text = "\n\n".join(parts)
         else:
