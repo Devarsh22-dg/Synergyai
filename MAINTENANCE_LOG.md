@@ -157,7 +157,102 @@ only once it is actually decided.
   empty-state messages say), so left for a decision rather than an
   automated guess.
 
+- **Generated download filenames never include the project name**
+  (raised 2026-09-05). All `st.download_button(..., file_name=...)` call
+  sites use fixed generic names (`test_cases.xlsx`,
+  `business_glossary.xlsx`, `requirements_traceability_matrix.xlsx`,
+  etc. — roughly 10 call sites across the file). A BA working several
+  client projects in the same session gets identically-named files
+  across projects, risking an accidental overwrite or mix-up once saved
+  locally. The individual change (prefix each with a sanitized project
+  name) is mechanically simple and needs no UX wording judgment, but it
+  touches enough call sites, and enough already-downloaded-file naming
+  conventions in the wild, that it's left for a decision rather than an
+  automated sweep across all of them in one night.
+
 ---
+
+## 2026-09-05
+
+**Committed**
+
+- `8325cf1` Preserve hyperlinked text in .docx extraction; reject binary
+  content when fetching Source URLs
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end
+  (explicitly excluding every item already sitting in Open items above
+  and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports — no drift. One high-
+  confidence finding and three borderline observations came back; the
+  high-confidence one plus a second candidate surfaced while verifying it
+  were independently re-verified against the pinned dependency versions
+  (`python-docx==1.2.0`) and standalone constructed test files before
+  being fixed.
+- **Fixed — `fetch_url_text` decoded binary responses as garbled "text"
+  with no Content-Type check.** The function downloaded and decoded the
+  entire response body before ever looking at `Content-Type`, then fed
+  anything that wasn't `text/plain` straight into
+  `BeautifulSoup(body, "html.parser")`, which never raises on garbage
+  input. Pasting a link to a PDF, image, or other binary file (plausible
+  in this workflow — a BA linking to a spec sheet or exported diagram
+  instead of a webpage) silently added decoded-binary noise to the
+  project's document repository and downstream AI prompts, with no error
+  shown. Fixed by checking `Content-Type` immediately after the response
+  headers arrive (before downloading or decoding the body) and rejecting
+  known-binary types (`image/*`, `video/*`, `audio/*`, `font/*`, PDF,
+  zip, octet-stream, legacy Office formats) with a clear
+  `st.error`-surfaced message, via the same `ValueError` path
+  `_assert_public_url`'s SSRF check already uses. Verified standalone:
+  PDF and image content types are rejected before any body bytes are
+  read; HTML, `text/plain`, and pages with a missing/empty Content-Type
+  header are unaffected; a JSON content-type is deliberately not
+  rejected (falls through to the existing HTML-parser path unchanged —
+  not the failure mode this fix targets).
+- **Fixed — `.docx` hyperlinked text silently dropped when mixed with
+  plain text in the same paragraph.** `extract_docx_with_formatting`
+  (~line 810) iterated `para.runs` to rebuild each paragraph's text with
+  markdown-style bold/italic/strikethrough markers. python-docx does not
+  include a paragraph's hyperlinks in `.runs` — a hyperlink's runs live
+  under a separate `Hyperlink` object — so a paragraph like "See
+  attached: `<link>policy document</link>` for details." kept the plain
+  text but dropped "policy document" entirely, with no warning. The
+  existing `if not para.runs: ... para.text` fallback only covered a
+  paragraph that was *entirely* a hyperlink (a real case, already
+  working); a mixed paragraph has non-empty `para.runs` from its plain
+  text, so it never hit that fallback. Verified directly against the
+  pinned `python-docx==1.2.0`: `Paragraph.text` does include hyperlink
+  text (confirmed from its docstring and by inspection), which is why
+  the hyperlink-only case worked and masked this gap. Fixed by iterating
+  `para.iter_inner_content()` instead and pulling a `Hyperlink`'s own
+  `.runs` in place, preserving both document order and per-run
+  bold/italic/strike formatting. Verified standalone with constructed
+  `.docx` files covering mixed plain+hyperlink+plain, hyperlink-only,
+  plain-only, bold-plain, and bold-hyperlink paragraphs — only the mixed
+  case changed output (hyperlink text now included), all others
+  byte-for-byte unaffected.
+- Two borderline observations came up but weren't logged as open items
+  since neither needs a decision on its own: (1) the Glossary and RTM
+  `st.data_editor` tables have the same never-written-back-to-project-
+  state gap as the already-open Story/Test Case editor item above — just
+  widening that item's known scope, not a separate issue; (2) one more
+  `generate_*` function (`generate_document`, the Documentation
+  Generator's markdown path) may share the already-open "no UI feedback
+  on a valid empty AI result" pattern — plausible but very rare in
+  practice for a free-text generation call, not independently verified,
+  and covered by the same open decision as the six already listed.
+- Checked the Nightly Evals GitHub Action run history directly (not
+  `evals/latest_report.md`, still dated 2026-08-18, or `evals/LEARNED.md`,
+  still no entries): last night's scheduled run (#34, on `a050c98`) also
+  failed, same shape and same `[st.error] AI request failed: Connection
+  error.` symptom on every fixture as every run since 2026-08-19. No new
+  information — status on the standing Open items entry is unchanged.
+- `evals/LEARNED.md` has no entries (open or closed) — nothing to act on
+  or close there tonight.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming their locations, per standing
+  instructions.
 
 ## 2026-09-04
 
