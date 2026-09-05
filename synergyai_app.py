@@ -15,6 +15,7 @@ import anthropic
 import pypdf
 from docx import Document
 from docx.table import Table as DocxTable
+from docx.text.hyperlink import Hyperlink as DocxHyperlink
 from pptx import Presentation
 from PIL import Image
 from openpyxl import Workbook
@@ -806,12 +807,22 @@ def extract_docx_with_formatting(uploaded_file, describe_images=True):
                     lines.append(" | ".join(cells_text))
             continue
         para = item
-        if not para.runs:
+        # Iterate inner content (not para.runs) so hyperlinked text mixed with plain
+        # runs in the same paragraph isn't silently dropped — python-docx exposes a
+        # hyperlink's own runs separately from the paragraph's, and para.runs skips
+        # them entirely.
+        runs = []
+        for el in para.iter_inner_content():
+            if isinstance(el, DocxHyperlink):
+                runs.extend(el.runs)
+            else:
+                runs.append(el)
+        if not runs:
             if para.text.strip():
                 lines.append(para.text)
             continue
         rendered = []
-        for run in para.runs:
+        for run in runs:
             t = run.text
             if not t:
                 continue
@@ -1173,6 +1184,19 @@ def fetch_url_text(url, timeout=10):
 
     resp.raise_for_status()
 
+    content_type = resp.headers.get("Content-Type", "").lower()
+    if content_type.startswith(("image/", "video/", "audio/", "font/")) or any(
+        ct in content_type for ct in (
+            "application/pdf", "application/zip", "application/octet-stream",
+            "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint",
+        )
+    ):
+        resp.close()
+        raise ValueError(
+            f"This URL returned a {content_type} file, not a webpage — "
+            "download it and upload it as a file instead."
+        )
+
     chunks = []
     total = 0
     for chunk in resp.iter_content(chunk_size=65536):
@@ -1187,7 +1211,6 @@ def fetch_url_text(url, timeout=10):
     except (LookupError, TypeError):
         body = b"".join(chunks).decode("utf-8", errors="ignore")
 
-    content_type = resp.headers.get("Content-Type", "").lower()
     if "text/plain" in content_type:
         return body, url
 
