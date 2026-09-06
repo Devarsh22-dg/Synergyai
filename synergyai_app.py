@@ -2367,11 +2367,15 @@ def ba_module():
             with st.expander("Generate Test Cases from These Stories", expanded=False):
                 st.caption("Derives test cases straight from the acceptance criteria above — no re-typing.")
                 if st.button("Generate Test Cases", key=f"generate_tc_btn_{cp}"):
-                    with st.spinner("Writing test cases..."):
-                        test_cases = generate_test_cases(edited_df.to_dict("records"))
-                    if test_cases:
-                        proj["test_cases"] = test_cases
-                        proj["test_cases_drafted"] = proj.get("test_cases_drafted", 0) + len(test_cases)
+                    story_records = edited_df.to_dict("records")
+                    if not story_records:
+                        st.warning("Add at least one user story first.")
+                    else:
+                        with st.spinner("Writing test cases..."):
+                            test_cases = generate_test_cases(story_records)
+                        if test_cases:
+                            proj["test_cases"] = test_cases
+                            proj["test_cases_drafted"] = proj.get("test_cases_drafted", 0) + len(test_cases)
 
                 test_cases = proj.get("test_cases", [])
                 if test_cases:
