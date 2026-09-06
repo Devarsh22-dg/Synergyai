@@ -170,7 +170,95 @@ only once it is actually decided.
   conventions in the wild, that it's left for a decision rather than an
   automated sweep across all of them in one night.
 
+- **Dashboard "drafted"/"found" counters mix additive and replace
+  semantics** (raised 2026-09-06). `documents_drafted` (~line 2216,
+  2223, 2230), `stories_drafted` (~2346), and `test_cases_drafted`
+  (~2374) all increment (`+= len(...)`) every time the user
+  regenerates, even though the underlying data (`proj["stories"]`,
+  `proj["test_cases"]`, `proj["last_doc_draft"]`) is replaced, not
+  appended to, on each regeneration. `glossary_terms_found` (~1919-1920),
+  by contrast, is reassigned (`= len(terms)`) on every regeneration. A
+  BA who regenerates User Stories three times (5 stories each time)
+  sees "User Stories Drafted: 15" on the dashboard while the actual
+  Story table has 5 rows; regenerating the glossary three times (10
+  terms each time) shows "Glossary Terms: 10", not 30. The dashboard's
+  own caption calls these "activity" metrics, so it's a real judgment
+  call whether all four should read as cumulative activity or as a
+  current count — not a one-line fix, needs a decision on intended
+  semantics (and possibly a wording change either way).
+
+- **Two tabs silently truncate carried-over context to 2,000
+  characters, with no notice, unlike every other truncation point in
+  the file** (raised 2026-09-06). Documentation Generator (~line
+  2198-2202) and Story Creator (~line 2331-2335) both pre-fill their
+  notes text area with `proj.get("extracted_text", "")[:2000]` when a
+  project has no repository documents selected. Every other place the
+  file truncates AI-bound text (the shared `truncate()`/`MAX_CHARS`
+  15,000-char path) shows a `st.caption(...)` notice when it cuts
+  something off; this 2,000-char slice does not. A BA who ran a
+  10,000+ character gap analysis, then opens Documentation Generator or
+  Story Creator with no repo docs selected, gets a silently truncated
+  starting point and may generate a document from a fraction of their
+  actual source material without any indication anything was cut.
+  Whether the right fix is a truncation caption, raising the limit to
+  match `MAX_CHARS`, or dropping the slice entirely is a UX call, not a
+  mechanical one — left for a decision.
+
 ---
+
+## 2026-09-06
+
+**Committed**
+
+- `928931d` Warn instead of silently calling the AI when the story
+  table is empty for test-case generation
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end
+  (explicitly excluding every item already sitting in Open items above
+  and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports — no drift (also verified
+  directly: every top-level import in `synergyai_app.py`, plus the
+  import block at the top of `auth.py` — nothing else in that file —
+  maps to one of the 11 pinned packages, and every pinned package is
+  used). Every installed package version in a fresh venv matched the
+  file's pins exactly (`pip list` cross-checked against
+  `requirements.txt`).
+- **Fixed — "Generate Test Cases" called the AI with an empty prompt
+  when the story table was emptied.** The story `data_editor`
+  (~line 2352) has `num_rows="dynamic"`, so a user can delete every row
+  in one action. `edited_df.to_dict("records")` was then passed
+  straight to `generate_test_cases()` (~line 2371) with no check,
+  unlike every sibling "Generate ..." button in the file (User
+  Stories, Prioritization, Change Impact, Glossary), which all warn and
+  skip the AI call when their input is empty. Verified the gap
+  directly by reading the call site and confirming `stories` (the
+  value checked at ~line 2349, before the expander renders) and
+  `edited_df`/`story_records` (the value actually sent, after any
+  in-table edits) are different values — so a non-empty initial
+  generation does not protect against an empty edited table at click
+  time. Fixed by checking `story_records` for emptiness immediately
+  before the AI call and showing "Add at least one user story first."
+  (same short, direct wording style as every other in-file warning of
+  this kind) instead of calling the AI. No change to the empty-result
+  UX-feedback question already sitting in Open items above — this is a
+  different gap (empty *input*, not an empty *AI response*).
+- Two new open items raised above (dashboard counter semantics, silent
+  2,000-char truncation in two tabs) — both are real, narrowly-scoped
+  UX questions surfaced by tonight's review, but each needs a wording/
+  design decision rather than being a mechanical fix, so neither was
+  acted on.
+- Checked the Nightly Evals GitHub Action run history directly (not
+  `evals/latest_report.md`, still dated 2026-08-18, or
+  `evals/LEARNED.md`, still no entries): last night's scheduled run
+  (#35, on `a0005d8`) also failed, identical shape to every run since
+  2026-08-19 (`Run eval harness` step fails, `Commit results` step
+  skipped). No new information — status on the standing Open items
+  entry is unchanged.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming their locations/import lines, per
+  standing instructions.
 
 ## 2026-09-05
 
