@@ -204,7 +204,79 @@ only once it is actually decided.
   match `MAX_CHARS`, or dropping the slice entirely is a UX call, not a
   mechanical one — left for a decision.
 
+- **`.txt` uploads have no binary-content check, unlike Source URL
+  fetches and zip-backed uploads** (raised 2026-09-07).
+  `extract_text_from_upload`'s `.txt` branch (~line 1063-1071) falls
+  back to `raw.decode("cp1252", errors="ignore")` whenever
+  `utf-8-sig` decoding fails, and `cp1252` maps every byte 0-255 to
+  some character, so that fallback can never itself raise. A binary
+  file renamed to end in `.txt` (a screenshot or PDF saved with the
+  wrong extension, plausible since `file_uploader(type=[...])` only
+  filters by extension) is silently accepted as garbled "text" with no
+  warning, and can reach an AI prompt as meaningless content — the
+  same failure class already fixed for Source URL fetches
+  (2026-09-05) and for zip-backed uploads (see today's entry below).
+  The obvious fix is a binary-content heuristic before decoding (e.g.
+  rejecting raw bytes containing a NUL byte), but that has a genuine
+  tradeoff: a small number of real `.txt` files saved as UTF-16
+  without a BOM would also contain NUL bytes and currently still
+  decode (as garbled-but-non-erroring text) via the same cp1252
+  fallback, so a NUL-byte reject would newly block a rare but genuine
+  case. Whether that tradeoff is acceptable, and the exact wording, is
+  a decision, not a mechanical fix.
+
 ---
+
+## 2026-09-07
+
+**Committed**
+
+- `a8658ec` Catch all zipfile parse failures, not just
+  BadZipFile/OSError, in archive safety check
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end
+  (explicitly excluding every item already sitting in Open items
+  above and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports — no drift (every
+  installed package version in a fresh venv matched the file's pins
+  exactly, `pip list` cross-checked against `requirements.txt`).
+- **Fixed — a corrupted zip-backed upload (.docx/.pptx/.xlsx) with a
+  malformed central-directory filename entry crashed the app instead
+  of showing the existing "isn't a readable Office document" message.**
+  `_assert_safe_archive` (~line 1016) only caught
+  `zipfile.BadZipFile`/`OSError` around
+  `zipfile.ZipFile(uploaded_file)`, but the constructor can also raise
+  `UnicodeDecodeError` while parsing a central-directory entry whose
+  UTF-8 flag bit is set but whose filename bytes aren't valid UTF-8 —
+  confirmed directly with a hand-crafted malformed zip reproducing the
+  exact exception, not just by reading the code. Neither the
+  function's own except clause nor the call site (which only catches
+  `ValueError`) covered that, so the exception propagated fully
+  unhandled, crashing that Streamlit run with a raw traceback. Widened
+  the except clause to `Exception`, matching the same broad-except
+  pattern the rest of `extract_text_from_upload` already uses for
+  every other parsing failure. Verified standalone (loaded through
+  evals' own `streamlit_shim`): the malformed-zip case now raises the
+  friendly `ValueError`; a plain garbage-bytes upload and a valid
+  archive are both unaffected.
+- One new open item raised above (`.txt` uploads silently accepting
+  binary content via the cp1252 fallback) — real gap, same class
+  already fixed for Source URLs and zip-backed uploads, but the
+  obvious fix (a NUL-byte check) has a genuine edge-case tradeoff
+  against non-BOM UTF-16 text files, so left for a decision rather
+  than guessed at.
+- Checked the Nightly Evals GitHub Action run history directly (not
+  `evals/latest_report.md`, still dated 2026-08-18, or
+  `evals/LEARNED.md`, still no entries): last night's scheduled run
+  (#36, on `e017bbe`) also failed, identical shape to every run since
+  2026-08-19 (`Run eval harness` step fails, `Commit results` step
+  skipped). No new information — status on the standing Open items
+  entry is unchanged.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming their locations/import lines, per
+  standing instructions.
 
 ## 2026-09-06
 
