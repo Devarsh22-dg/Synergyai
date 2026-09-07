@@ -1031,7 +1031,11 @@ def _assert_safe_archive(uploaded_file, ext):
     try:
         with zipfile.ZipFile(uploaded_file) as zf:
             total = sum(info.file_size for info in zf.infolist())
-    except (zipfile.BadZipFile, OSError):
+    except Exception:
+        # zipfile can raise more than BadZipFile/OSError while parsing a
+        # malformed central directory — e.g. UnicodeDecodeError on a filename
+        # entry with the UTF-8 flag set but invalid UTF-8 bytes. Any failure
+        # here means the archive isn't safely readable, so treat it the same.
         raise ValueError(
             f"This .{ext} file isn't a readable Office document — it may be corrupted."
         ) from None
