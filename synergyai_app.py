@@ -1983,6 +1983,8 @@ def ba_module():
                 st.markdown("### Key Decisions")
                 for d in decisions:
                     st.write(f"- {d}")
+            else:
+                st.caption("No explicit decisions were identified in this transcript.")
 
             st.markdown("### Action Items Extracted")
             items = result.get("action_items", [])
@@ -2039,12 +2041,18 @@ def ba_module():
                         "topic": "Topic", "duration_minutes": "Minutes", "purpose": "Purpose",
                     })
                     st.dataframe(agenda_df, use_container_width=True, hide_index=True)
+                else:
+                    st.caption("No agenda items were generated.")
                 st.markdown("**Questions to Ask**")
-                for cat in sorted(set(q.get("category", "Other") for q in prep.get("questions", []))):
-                    st.markdown(f"*{cat}*")
-                    for q in prep.get("questions", []):
-                        if q.get("category", "Other") == cat:
-                            st.write(f"- {q.get('question', '')}")
+                questions = prep.get("questions", [])
+                if questions:
+                    for cat in sorted(set(q.get("category", "Other") for q in questions)):
+                        st.markdown(f"*{cat}*")
+                        for q in questions:
+                            if q.get("category", "Other") == cat:
+                                st.write(f"- {q.get('question', '')}")
+                else:
+                    st.caption("No elicitation questions were generated.")
                 prep_md = f"# Workshop Prep — {proj.get('workshop_prep_focus', '') or cp}\n\n{prep.get('objectives', '')}\n\n## Agenda\n"
                 for a in prep.get("agenda", []):
                     prep_md += f"- **{a.get('topic', '')}** ({a.get('duration_minutes', '')} min) — {a.get('purpose', '')}\n"
@@ -2510,6 +2518,8 @@ def ba_module():
                 st.markdown("**Recommended Next Actions**")
                 for act in actions:
                     st.write(f"- {act}")
+            else:
+                st.caption("No specific next actions were recommended for this change.")
 
             if len(change_history) > 1:
                 with st.expander(f"Previous change requests analyzed ({len(change_history) - 1})"):
