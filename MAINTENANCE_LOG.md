@@ -227,6 +227,60 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-08
+
+**Committed**
+
+- `3dae7f7` Show empty-state messages for Key Decisions, Recommended Next
+  Actions, and Workshop Prep agenda/questions
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end (all 2624
+  lines, explicitly excluding every item already sitting in Open items
+  above and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports — no drift.
+- **Fixed — three more fields silently render nothing when the AI validly
+  returns an empty list, same bug class as the already-open "six
+  `generate_*` functions give no UI feedback on an empty result" item but
+  in three different functions not on that item's list.** `process_meeting`
+  (~line 1981) showed no message at all for an empty `decisions` list, even
+  though `action_items` two lines below it already has an explicit `else:
+  st.caption(...)` for the same case. `generate_change_impact` (~line 2508)
+  had the identical gap for `recommended_actions`, with `affected_
+  requirements` directly above it already handling it. `generate_workshop_
+  prep` (~line 2036-2047) had it for both `agenda` and `questions`, with no
+  sibling field in that block handling it either way. All three verified
+  by reading the exact code (not just the agent's report) before fixing;
+  each fix copies the sibling `else: st.caption(...)` idiom already
+  present and working in the same function, so no new UX wording was
+  invented — this is why these were safe to fix directly rather than left
+  for the standing open item (that one needs a wording decision across six
+  *different* functions that have no existing sibling pattern to copy).
+- Two secondary observations came up but weren't logged as new open items:
+  (1) the "Build / Refresh RTM" button fully overwrites `proj["rtm_rows"]`
+  from scratch, discarding any hand-edits made in the RTM's own
+  `st.data_editor` if the user regenerates afterward — same class of gap
+  as the already-open "editor edits never written back to project state"
+  item, just widening it to a fourth table (RTM) rather than a separate
+  issue, matching how the Glossary/RTM widening was handled on 2026-08-30;
+  (2) `fetch_url_text`'s Content-Type check (added 2026-09-05) only
+  rejects a fixed list of known-binary types, so a server that omits the
+  header entirely still sails through to the HTML parser — narrow,
+  low-likelihood in practice, and adjacent to the already-open `.txt`
+  binary-content item rather than a new decision on its own.
+- Checked the Nightly Evals GitHub Action run history directly: last
+  night's scheduled run (#37, on `82f6aab`) also failed, identical shape
+  and identical `[st.error] AI request failed: Connection error.` symptom
+  on every fixture as every run since 2026-08-19. No new diagnostic
+  information in the job log beyond what's already in the standing Open
+  items entry — status unchanged, no new guess warranted.
+- `evals/LEARNED.md` still has no entries (open or closed) — nothing to
+  act on or close there tonight.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming their locations/import lines, per
+  standing instructions.
+
 ## 2026-09-07
 
 **Committed**
