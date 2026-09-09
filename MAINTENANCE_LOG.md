@@ -225,7 +225,87 @@ only once it is actually decided.
   case. Whether that tradeoff is acceptable, and the exact wording, is
   a decision, not a mechanical fix.
 
+- **No cap on repository size or document count per project** (raised
+  2026-09-09). Individual uploads are size-capped (`MAX_UPLOAD_BYTES`,
+  plus the zip-bomb guard), but nothing bounds how many documents or
+  how much cumulative text a project's `proj["documents"]` list can
+  hold (`st.file_uploader(..., accept_multiple_files=True)` with no
+  batch or session limit, all held in `st.session_state`). Every
+  downstream tab concatenates all *selected* repo docs into one
+  prompt, bounded only at the AI-call layer by `MAX_CHARS` truncation,
+  not before. A user repeatedly uploading large files can grow session
+  memory without bound. The right cap (doc count vs. total chars vs.
+  total bytes) and what happens at the limit (reject newest, warn-only,
+  evict oldest) is a product decision, not a mechanical fix.
+
+- **Chat transcript display is never trimmed, unlike what's sent to the
+  API** (raised 2026-09-09). `st.session_state["chat_history"]` is
+  rendered in full on every rerun (~line 2613-2634:
+  `for msg in st.session_state["chat_history"]: st.chat_message(...)`),
+  while only what's *sent to Claude* is capped
+  (`_recent_chat_messages`, `MAX_CHAT_MESSAGES_SENT`). In a very
+  long-lived session this means unbounded DOM/session-state growth for
+  display, even though the original API-cost/context-limit problem is
+  already solved. Minor, non-urgent — but capping *displayed* history
+  is itself a UX call (truncate vs. paginate vs. "load earlier
+  messages"), not a mechanical fix.
+
 ---
+
+## 2026-09-09
+
+**Committed**
+
+- `1df5b19` Warn when duplicate filenames in one upload batch silently
+  overwrite each other
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end (all
+  ~2634 lines, explicitly excluding every item already sitting in Open
+  items above and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports — no drift, confirmed
+  directly (every top-level import in `synergyai_app.py` and the
+  import lines of `auth.py` map to a pinned package or the stdlib).
+- **Fixed — the "Add to Repository" button's success count didn't
+  reflect that two files with the same name in one upload batch
+  silently overwrite each other.** `add_doc_to_repo()` (~line 547)
+  dedupes by name, replacing any existing document with a matching
+  name; the button handler (~line 1810) counted every processed file
+  toward "Added N document(s)" with no check for same-batch name
+  collisions, so a user who selected two same-named files (plausible
+  via drag-and-drop from different folders, or multiple file-picker
+  invocations before hitting the button) silently lost the first
+  file's content with a success message implying nothing was lost.
+  Verified directly by reading `add_doc_to_repo` and the call site
+  before fixing. Fix tracks repeated filenames within the batch and
+  appends a note to the success message naming them and stating only
+  the last version of each was kept — narrow, self-contained, no
+  AI/prompt/auth involvement, no change to the underlying
+  last-write-wins storage behavior.
+- Two new open items raised above from the same review: no cap on
+  repository size/document count per project, and the chat transcript
+  display growing unbounded (only what's sent to the API is capped).
+  Both are product/UX decisions (what limit, what happens at the
+  limit, truncate vs. paginate), not mechanical fixes.
+- Checked the Nightly Evals GitHub Action directly (not just the stale
+  `evals/latest_report.md`, still dated 2026-08-18): last night's run
+  (#38, on `3c286ba`) failed with the identical
+  `[st.error] AI request failed: Connection error.` symptom on every
+  fixture, same as every run since 2026-08-19. No new diagnostic
+  information — status on the standing Open items entry is unchanged.
+- `evals/LEARNED.md` still has no entries (open or closed) — nothing
+  to act on or close there tonight.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming import lines / docstring headers,
+  per standing instructions. Confirmed no stale references to the
+  deleted `otp_email.py` remain anywhere in the repo.
+- `python3 -m py_compile synergyai_app.py` and
+  `evals/run_evals.py --dry-run` both passed before committing;
+  `bs4`/other dependencies weren't preinstalled in this session's
+  environment, so a throwaway venv was created from `requirements.txt`
+  to run the dry-run check (no changes to the environment's own
+  packages).
 
 ## 2026-09-08
 
