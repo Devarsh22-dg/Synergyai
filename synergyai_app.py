@@ -1812,13 +1812,25 @@ def ba_module():
                 st.warning("Choose at least one file first.")
             else:
                 added = 0
+                seen_this_batch = set()
+                repeated_names = set()
                 for f in repo_files:
                     text = extract_text_from_upload(f)
                     if text.strip():
+                        if f.name in seen_this_batch:
+                            repeated_names.add(f.name)
+                        seen_this_batch.add(f.name)
                         add_doc_to_repo(proj, f.name, text, f.name.split(".")[-1].lower())
                         added += 1
                 if added:
-                    st.success(f"Added {added} document(s) to the repository.")
+                    msg = f"Added {added} document(s) to the repository."
+                    if repeated_names:
+                        names = ", ".join(sorted(repeated_names))
+                        msg += (
+                            f" Note: {names} appeared more than once in this selection — "
+                            "only the last version of each was kept."
+                        )
+                    st.success(msg)
                     st.rerun()
                 else:
                     st.warning("No documents were added — none of the selected file(s) had readable text.")
