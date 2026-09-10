@@ -1612,6 +1612,9 @@ def build_rtm_rows(proj):
 
 
 def generate_change_impact(change_request_text, existing_context):
+    change_request_text, request_was_truncated = truncate(change_request_text)
+    if request_was_truncated:
+        st.caption(f"Change request was long — using the first {MAX_CHARS:,} characters.")
     existing_context, was_truncated = truncate(existing_context)
     if was_truncated:
         st.caption(f"Existing project content was long — using the first {MAX_CHARS:,} characters.")
@@ -1974,9 +1977,7 @@ def ba_module():
             if uploaded_transcript is not None:
                 with st.spinner("Extracting text..."):
                     text = extract_text_from_upload(uploaded_transcript)
-                if not text.strip():
-                    st.error("Couldn't extract any readable text from this transcript.")
-                else:
+                if text.strip():
                     with st.spinner("Extracting decisions, owners, and actions..."):
                         result = process_meeting(text)
                     if result:
