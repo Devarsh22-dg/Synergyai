@@ -250,7 +250,87 @@ only once it is actually decided.
   is itself a UX call (truncate vs. paginate vs. "load earlier
   messages"), not a mechanical fix.
 
+- **Individual chat messages are silently truncated for the API with no
+  on-screen trace anywhere** (raised 2026-09-10). `_recent_chat_messages`
+  (~line 1658-1679, `MAX_CHAT_MESSAGE_CHARS = 6000`) appends a
+  `"[...truncated for length...]"` marker to any single message over
+  6,000 characters, but only in the copy sent to Claude — the message
+  stored in `chat_history` and rendered on screen is untouched, per the
+  function's own docstring. Every other truncation point in the file
+  (`truncate()`/`MAX_CHARS`) shows an `st.caption` notice when it cuts
+  something off; this one shows nothing, anywhere. Distinct from the
+  open "chat transcript display never trimmed" item directly above
+  (that one is unbounded *display* growth over a long session; this is
+  a truncation that already happens per-message today with zero visible
+  trace). Whether to surface it — an inline caption under the sent
+  message, a toast, or leaving it as intentionally invisible cost/
+  context-limit plumbing — is a UX call, not a mechanical fix.
+
 ---
+
+## 2026-09-10
+
+**Committed**
+
+- `fbb8436` Truncate change_request_text before sending to the API, like
+  every other primary AI input (this single commit also carries the
+  Process Transcript fix below — see Worth knowing)
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end (all
+  ~2650 lines, explicitly excluding every item already sitting in Open
+  items above and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports in both `synergyai_app.py`
+  and `auth.py`'s import lines — no drift.
+- **Fixed — `generate_change_impact()`'s `change_request_text` was the
+  one primary AI-input field in the file with no `truncate()`/
+  `MAX_CHARS` guard.** Verified directly by reading the function and
+  its only call site (~line 2504, Change Request Impact Analyzer):
+  `change_request_text` comes from an unbounded `st.text_area` with no
+  `max_chars`, while the function's other argument (`existing_context`)
+  was already truncated two lines below with a caption. A BA pasting a
+  long change request (e.g. a multi-paragraph email thread) had it sent
+  to the API completely unbounded with no notice. Now truncated with
+  the identical pattern already used for `existing_context`.
+- **Fixed — the Process Transcript button showed a second, redundant
+  "Couldn't extract any readable text" error stacked on top of
+  `extract_text_from_upload`'s own message.** Verified directly that
+  `extract_text_from_upload` already shows a specific `st.error`/
+  `st.warning` on every code path that returns empty text for the only
+  two file types this uploader accepts (`.txt`, `.docx`); the call site
+  (~line 1977) then added its own generic error on the same condition.
+  Matches the file's two other call sites of `extract_text_from_upload`,
+  neither of which double-messages. Fix removes the duplicate; the
+  branch that skips `process_meeting()` on empty text is unchanged.
+- Both fixes above landed in a single commit (`fbb8436`) rather than
+  two separate ones — a staging oversight, not intentional bundling.
+  Each was independently verified before being applied and is
+  self-contained; noted here so the commit list above isn't misread as
+  one fix covering two unrelated call sites.
+- One new open item raised above: individual chat messages are
+  silently truncated for the API with no on-screen trace anywhere —
+  distinct from the already-open "chat transcript display never
+  trimmed" item, which is about unbounded *display* growth, not this
+  invisible per-message truncation.
+- Checked the Nightly Evals GitHub Action directly: last night's
+  scheduled run (#39, on `b2d5595`, the commit this routine started
+  from tonight) failed with the identical
+  `[st.error] AI request failed: Connection error.` symptom on every
+  one of the 7 fixtures, same as every run since 2026-08-19. No new
+  diagnostic information — status on the standing Open items entry is
+  unchanged.
+- `evals/LEARNED.md` still has no entries (open or closed) — nothing to
+  act on or close there tonight.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming import lines, per standing
+  instructions. Confirmed no stale references to the deleted
+  `otp_email.py` remain anywhere in the repo.
+- `python3 -m py_compile synergyai_app.py` and
+  `evals/run_evals.py --dry-run` both passed before committing;
+  dependencies weren't preinstalled in this session's environment, so a
+  throwaway venv was created from `requirements.txt` to run the
+  dry-run check (no changes to the environment's own packages).
 
 ## 2026-09-09
 
