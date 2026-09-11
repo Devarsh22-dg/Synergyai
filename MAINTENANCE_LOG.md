@@ -266,7 +266,110 @@ only once it is actually decided.
   message, a toast, or leaving it as intentionally invisible cost/
   context-limit plumbing — is a UX call, not a mechanical fix.
 
+- **PDF embedded images are fully decompressed into memory before any
+  size check runs, unlike docx/pptx uploads** (raised 2026-09-11).
+  `extract_pdf_with_annotations()` (~line 881) accesses `img.data`
+  (~line 926) to get each embedded image's raw bytes; pypdf inflates
+  the image's compressed stream in full at that point.
+  `_assert_safe_archive()` (~line 1027) guards zip-backed uploads
+  (docx/pptx) against a decompression-bomb by checking each member's
+  *declared* uncompressed size before extracting anything — PDFs have
+  no equivalent pre-check. `MAX_IMAGE_BYTES` (~line 697) only runs
+  afterward, inside `_prepare_image_for_vision()`, by which point the
+  oversized buffer already exists in memory. PDF image streams
+  commonly use DEFLATE-family compression (the same family zip uses),
+  so a small, crafted PDF well under `MAX_UPLOAD_BYTES` could still
+  contain a highly-compressible synthetic image that expands to a very
+  large in-memory buffer during that single `.data` access — the same
+  risk class the archive guard exists to close, via a different file
+  format. A robust fix (checking declared pixel dimensions in the
+  image's XObject dictionary before pypdf decodes it, mirroring what
+  `_assert_safe_archive` does for zip sizes) needs verification against
+  real adversarial PDF samples that aren't available in this routine;
+  a partial fix (checking `len(img.data)` right after each image, before
+  moving to the next) only bounds cumulative damage across a document's
+  images, not the peak memory of decoding one crafted image — a
+  genuine tradeoff, left for a decision rather than a guessed patch.
+
 ---
+
+## 2026-09-11
+
+**Committed**
+
+- `e19a372` Fix Source URL fetch mojibake on pages with no Content-Type
+  charset
+- `f8673cf` Fix merged Word table cells duplicating text in extracted
+  content
+
+**Worth knowing**
+
+- **`e19a372` root cause:** `requests` defaults `resp.encoding` to
+  `ISO-8859-1` (RFC 2616) whenever a `Content-Type: text/html` response
+  omits a `charset` param — which is the common case for UTF-8 pages
+  that only declare their charset via a `<meta>` tag, since most modern
+  sites do exactly that. The pre-existing `resp.encoding or "utf-8"`
+  fallback never fired because that RFC default is truthy, not `None`,
+  so every such page was decoded as Latin-1 and sent to Claude (and
+  shown to the BA) as mojibake, with no error anywhere. Verified the
+  exact behavior against the pinned `requests==2.34.2` directly before
+  touching anything. Fix hands BeautifulSoup the raw bytes so its own
+  sniffer (BOM / `<meta charset>`) does the work, only passing the
+  header's encoding as a hint when the server actually declared one —
+  tested all three cases (no header charset, explicit non-UTF-8 header
+  charset with no `<meta>` tag, `text/plain`) with mocked responses
+  before committing.
+- **`f8673cf` root cause:** python-docx returns the identical `Cell`
+  object once per grid column a horizontally-merged cell spans, so the
+  original `[cell.text for cell in row.cells]` turned any merged
+  header/grouping cell (common in requirements tables) into repeated
+  text in the extracted line. Fix dedupes consecutive cells by object
+  identity, not text content — verified directly with python-docx that
+  this correctly leaves two *distinct* adjacent cells holding equal
+  text alone, and that vertically-merged cells (a separate case, each
+  row still correctly shows its own content) are unaffected.
+- Both fixes went further than the background review agent's own
+  report: the agent flagged the docx merge-duplication finding as
+  "suggest only, not safe to auto-fix," citing no real merged-cell
+  sample document to verify against. Before accepting that, a synthetic
+  merged-cell `.docx` was built and run through the actual
+  `extract_docx_with_formatting()` end-to-end (not just the isolated
+  cell-iteration logic), which resolved the agent's stated uncertainty
+  directly — the fix was then applied. The agent's third finding (PDF
+  embedded-image decompression, below) was left as suggest-only for a
+  different reason — no adversarial PDF sample was available to verify
+  a fix against, and a partial fix only bounds cumulative damage rather
+  than the actual risk — so that one is a new open item, not a fix.
+- A background review agent read `synergyai_app.py` end to end
+  (~2650+ lines, excluding everything already in Open items and every
+  prior dated entry) looking for new, safe, narrowly-scoped issues.
+  `requirements.txt` was checked directly against actual imports in
+  both `synergyai_app.py` and `auth.py` — no drift (all third-party
+  imports map onto a pinned requirement; standard-library imports need
+  no entry).
+- One new open item raised above: PDF embedded images are fully
+  decompressed into memory before any size check runs, unlike zip-backed
+  (docx/pptx) uploads which are checked before extraction.
+- Checked the Nightly Evals GitHub Action directly: last night's
+  scheduled run (#40, on `7c26e49`, the commit this routine started
+  from tonight) failed with the standing symptom, same as every run
+  since 2026-08-19. No new diagnostic information — status on the
+  standing Open items entry is unchanged; not re-investigated further
+  per that entry's own reasoning (a third guess at the same symptom
+  isn't warranted without new evidence).
+- `evals/LEARNED.md` still has no entries (open or closed) — nothing to
+  act on or close there tonight.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming import lines, per standing
+  instructions. Confirmed no stale references to the deleted
+  `otp_email.py` remain anywhere in the repo.
+- `python3 -m py_compile synergyai_app.py` and
+  `evals/run_evals.py --dry-run` both passed before each of tonight's
+  two commits; dependencies weren't preinstalled in this session's
+  environment, so a throwaway venv was created from `requirements.txt`
+  (as in prior nights) to run the dry-run check and the additional
+  targeted functional verification described above — no changes to the
+  environment's own packages.
 
 ## 2026-09-10
 
