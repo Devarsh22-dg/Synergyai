@@ -1209,16 +1209,24 @@ def fetch_url_text(url, timeout=10):
             resp.close()
             raise ValueError(f"This page is larger than {MAX_FETCH_URL_BYTES // (1024*1024)}MB — too large to fetch.")
         chunks.append(chunk)
-    resp.encoding = resp.encoding or "utf-8"
-    try:
-        body = b"".join(chunks).decode(resp.encoding, errors="ignore")
-    except (LookupError, TypeError):
-        body = b"".join(chunks).decode("utf-8", errors="ignore")
+    raw_bytes = b"".join(chunks)
 
     if "text/plain" in content_type:
-        return body, url
+        resp.encoding = resp.encoding or "utf-8"
+        try:
+            return raw_bytes.decode(resp.encoding, errors="ignore"), url
+        except (LookupError, TypeError):
+            return raw_bytes.decode("utf-8", errors="ignore"), url
 
-    soup = BeautifulSoup(body, "html.parser")
+    # requests defaults resp.encoding to ISO-8859-1 (RFC 2616) whenever the
+    # Content-Type header omits a charset — which is wrong for the common
+    # case of a UTF-8 page that only declares its charset via a <meta> tag,
+    # and would otherwise silently mojibake every non-ASCII character. Only
+    # pass the header's encoding as a hint when the server actually declared
+    # one; let BeautifulSoup's own sniffer (BOM / <meta charset>) handle the
+    # rest.
+    declared_charset = "charset=" in content_type
+    soup = BeautifulSoup(raw_bytes, "html.parser", from_encoding=(resp.encoding if declared_charset else None))
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     title = soup.title.string.strip() if (soup.title and soup.title.string) else url
