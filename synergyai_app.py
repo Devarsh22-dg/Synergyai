@@ -802,7 +802,18 @@ def extract_docx_with_formatting(uploaded_file, describe_images=True):
     for item in doc.iter_inner_content():
         if isinstance(item, DocxTable):
             for row in item.rows:
-                cells_text = [cell.text.strip() for cell in row.cells]
+                # A horizontally-merged cell comes back from python-docx once per
+                # grid column it spans (the identical Cell object each time), so
+                # without this a 3-column merge would triplicate its text in the
+                # output line — dedupe consecutive repeats by identity, not text,
+                # so cells that just happen to hold the same text stay intact.
+                cells_text = []
+                prev_cell = None
+                for cell in row.cells:
+                    if cell is prev_cell:
+                        continue
+                    cells_text.append(cell.text.strip())
+                    prev_cell = cell
                 if any(cells_text):
                     lines.append(" | ".join(cells_text))
             continue
