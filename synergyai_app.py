@@ -1836,11 +1836,15 @@ def ba_module():
                 added = 0
                 seen_this_batch = set()
                 repeated_names = set()
+                overwritten_names = set()
+                existing_names = {d["name"] for d in proj["documents"]}
                 for f in repo_files:
                     text = extract_text_from_upload(f)
                     if text.strip():
                         if f.name in seen_this_batch:
                             repeated_names.add(f.name)
+                        elif f.name in existing_names:
+                            overwritten_names.add(f.name)
                         seen_this_batch.add(f.name)
                         add_doc_to_repo(proj, f.name, text, f.name.split(".")[-1].lower())
                         added += 1
@@ -1851,6 +1855,12 @@ def ba_module():
                         msg += (
                             f" Note: {names} appeared more than once in this selection — "
                             "only the last version of each was kept."
+                        )
+                    if overwritten_names:
+                        names = ", ".join(sorted(overwritten_names))
+                        msg += (
+                            f" Note: {names} replaced an existing document with the same "
+                            "name already in the repository."
                         )
                     st.success(msg)
                     st.rerun()
