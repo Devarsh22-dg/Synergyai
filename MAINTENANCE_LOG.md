@@ -291,7 +291,66 @@ only once it is actually decided.
   images, not the peak memory of decoding one crafted image — a
   genuine tradeoff, left for a decision rather than a guessed patch.
 
+- **User-typed free text is echoed back through markdown-interpreting
+  widgets, so a BA's own input can visibly mangle the page** (raised
+  2026-09-12). `st.caption(f"Notes accounted for: \"{proj['last_notes'][:200]}\"")`
+  (~line 2168) and `st.markdown(f"**Change request:** {latest['request_text']}")`
+  / `st.markdown(f"**{prev['request_text']}**")` (~lines 2537, 2559) all
+  interpolate raw text the BA typed into a `st.text_area` — not AI
+  output — directly into a markdown-parsing call. A change request or
+  note containing a leading `#`, an unmatched `**`, or a `---` line
+  renders as a heading/broken bold run/rule instead of literal text. Not
+  an XSS risk (`unsafe_allow_html` isn't set at any of these sites), just
+  a rendering/copy bug. The obvious-looking fix (swap `st.markdown` for
+  `st.write`) does not actually fix it — `st.write` on a plain string
+  falls through to the same markdown renderer. A real fix needs either a
+  small markdown-escaping helper before interpolation, or `st.text()`
+  (which changes the visual style to monospace/preformatted) — a
+  judgment call on the tradeoff, not a mechanical one-line patch, so left
+  for a decision.
+
 ---
+
+## 2026-09-12
+
+**Committed**
+
+- `6fcbee4` Warn when a repo upload silently overwrites an existing
+  document
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end
+  (~2666 lines, excluding everything already in Open items and every
+  prior dated entry) looking for new, safe, narrowly-scoped issues.
+  Two findings came back: the overwrite-warning gap fixed tonight, and
+  the markdown-escaping issue above (left as suggest-only, per its own
+  reasoning — the seemingly-obvious fix doesn't work, and severity is
+  low/cosmetic, not security-relevant).
+- **`6fcbee4` verified beyond compile/dry-run:** before committing, ran
+  the upload handler's dedup/overwrite logic in isolation against three
+  cases in the same batch (a name matching an existing repo document, a
+  name repeated twice within the batch, and a genuinely new name) and
+  confirmed the message correctly distinguishes "replaced an existing
+  document" from "appeared more than once in this selection" and that
+  the final repository still ends up with exactly one entry per name.
+- `requirements.txt` was checked directly against actual imports in both
+  `synergyai_app.py` and `auth.py`/`db.py`'s import lines — no drift.
+- `evals/latest_report.md` is still the same stale 2026-08-18 report
+  (Nightly Evals Action still failing per the standing Open items
+  entry — not re-investigated further tonight, no new evidence).
+  `evals/LEARNED.md` still has no entries (open or closed) — nothing to
+  act on or close there tonight.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming import lines, per standing
+  instructions. Confirmed no stale references to the deleted
+  `otp_email.py` remain anywhere in the repo.
+- `python3 -m py_compile synergyai_app.py` and
+  `evals/run_evals.py --dry-run` both passed on the unmodified file
+  before any change, and again after tonight's edit; dependencies
+  weren't preinstalled in this session's environment, so a throwaway
+  venv was created from `requirements.txt` (as in prior nights) to run
+  the dry-run check — no changes to the environment's own packages.
 
 ## 2026-09-11
 
