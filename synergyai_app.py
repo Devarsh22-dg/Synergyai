@@ -1980,7 +1980,7 @@ def ba_module():
                         "term": "Term", "definition": "Definition", "source_context": "Source Context",
                     })
                     gl_df = gl_df.reindex(columns=["Term", "Definition", "Source Context"], fill_value="")
-                    gl_df = gl_df.sort_values("Term")
+                    gl_df = gl_df.sort_values("Term", key=lambda s: s.str.lower())
                     edited_gl_df = st.data_editor(gl_df, use_container_width=True, num_rows="dynamic", key=f"glossary_editor_{cp}")
 
                     gdl1, gdl2 = st.columns(2)
