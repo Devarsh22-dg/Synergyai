@@ -1077,7 +1077,13 @@ def extract_text_from_upload(uploaded_file):
     try:
         if ext == "txt":
             raw = uploaded_file.read()
-            if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+            if raw[:4] in (b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff"):
+                # Checked before the UTF-16 BOM below: a UTF-32 LE BOM's first
+                # two bytes (\xff\xfe) are identical to the UTF-16 LE BOM, so
+                # the narrower check must run first or UTF-32 text silently
+                # decodes as UTF-16 garbage instead of raising.
+                text = raw.decode("utf-32")
+            elif raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
                 text = raw.decode("utf-16")
             else:
                 try:
