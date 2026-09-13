@@ -309,7 +309,91 @@ only once it is actually decided.
   judgment call on the tradeoff, not a mechanical one-line patch, so left
   for a decision.
 
+- **`fetch_url_text`'s per-chunk timeout doesn't bound the total time a
+  Source URL fetch can take** (raised 2026-09-13). `requests.get(...,
+  timeout=10, stream=True, ...)` (~line 1185) with `requests`, a
+  `timeout` on a streamed response bounds connect time and the gap
+  between successive reads, not total elapsed time — a server that
+  trickles at least one byte every few seconds (deliberately or just
+  slow) can keep the request open far longer than the 10s the code
+  implies, all while staying under the existing `MAX_FETCH_URL_BYTES`
+  size cap. A real gap, but closing it means tracking wall-clock time
+  across the `iter_content` loop and picking a ceiling value (and
+  whether that ceiling applies to the whole redirect chain or resets
+  per hop) — a small design call, not a one-line patch, so left open
+  rather than guessed at.
+
+- **New project names are deduplicated case-sensitively** (raised
+  2026-09-13). The "create project" flow (~line 1804) checks `new_name
+  in st.session_state["projects"]`, a plain dict-key membership test, so
+  "Alpha-FinTech Migration" and "alpha-fintech migration" are treated as
+  two different projects. The code change itself is small
+  (case-fold the comparison), but whether project names should be
+  unique case-insensitively, and what to do about any existing
+  differently-cased duplicates already sitting in a user's session, is
+  a product decision rather than a mechanical fix.
+
 ---
+
+## 2026-09-13
+
+**Committed**
+
+- `7b73389` Fix UTF-32 BOM misdetected as UTF-16 in .txt uploads
+- `19c0eb8` Sort Business Glossary terms case-insensitively
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end (all
+  2676 lines, explicitly excluding every item already sitting in Open
+  items above and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports — no drift (re-confirmed
+  directly too: every top-level import maps to a pinned package or the
+  stdlib, and every pinned package is used; `streamlit-authenticator` is
+  unused in this file by design, documented as being for `auth.py`,
+  which was not opened).
+- **Fixed — a UTF-32-encoded `.txt` upload was silently decoded as
+  UTF-16, producing garbled text with no error.** `extract_text_from_
+  upload`'s `.txt` branch (~line 1078) checked only the first two bytes
+  for a UTF-16 BOM (`\xff\xfe` or `\xfe\xff`), but a UTF-32 LE BOM's
+  first two bytes are the identical `\xff\xfe` — `bytes.decode("utf-16")`
+  on UTF-32 bytes doesn't raise, it just produces mojibake (confirmed
+  directly: decoding UTF-32 LE-encoded "hello" as UTF-16 yields spaced-
+  out garbage, not an exception). Fixed by checking the 4-byte UTF-32 LE
+  and BE BOM patterns first, before the narrower 2-byte UTF-16 check.
+  Verified standalone through the app's own code (not just in
+  isolation): a UTF-32 LE upload now extracts cleanly, a UTF-16 LE
+  upload is unaffected (regression check), and a plain UTF-8 upload is
+  unaffected.
+- **Fixed — the Business Glossary table sorted terms ASCII-case-
+  sensitively, not alphabetically.** `gl_df.sort_values("Term")`
+  (~line 1977) used pandas' default string sort, so every uppercase-
+  initial term sorted before every lowercase-initial term (e.g. "Zebra"
+  before "api") — confusing for a BA scanning an alphabetized glossary.
+  Fixed with a case-folded sort key. Verified standalone: `["Zebra",
+  "api", "Banana", "apple"]` now sorts to `["api", "apple", "Banana",
+  "Zebra"]`.
+- Two new open items raised above: `fetch_url_text`'s per-read (not
+  total) timeout, and case-sensitive project-name deduplication. Both
+  need a small design call (a timeout ceiling/strategy; a
+  case-insensitive-uniqueness policy decision) rather than being
+  mechanical fixes.
+- `evals/latest_report.md` is still the same stale 2026-08-18 report
+  (Nightly Evals Action still failing per the standing Open items entry
+  — not re-investigated further tonight, no new evidence).
+  `evals/LEARNED.md` still has no entries (open or closed) — nothing to
+  act on or close there tonight.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming import lines, per standing
+  instructions. Confirmed no stale references to the deleted
+  `otp_email.py` remain anywhere in the repo.
+- `python3 -m py_compile synergyai_app.py` and `evals/run_evals.py
+  --dry-run` both passed on the unmodified file before any change, and
+  again after each of tonight's two commits; dependencies weren't
+  preinstalled in this session's environment, so a throwaway venv was
+  created from `requirements.txt` (as in prior nights) to run the
+  dry-run check and the additional standalone verification described
+  above — no changes to the environment's own packages.
 
 ## 2026-09-12
 
