@@ -2180,7 +2180,10 @@ def ba_module():
             n_open = len(result.get("open_questions", []))
             st.success(f"Analysis complete. Found {n_open} possible gap(s).")
             if proj.get("last_notes"):
-                st.caption(f"Notes accounted for: \"{proj['last_notes'][:200]}\"")
+                notes_preview = proj["last_notes"]
+                if len(notes_preview) > 200:
+                    notes_preview = notes_preview[:200] + "…"
+                st.caption(f"Notes accounted for: \"{notes_preview}\"")
             if result.get("summary"):
                 st.caption(result["summary"])
             st.metric(label="Possible Gaps", value=n_open)
