@@ -333,7 +333,96 @@ only once it is actually decided.
   differently-cased duplicates already sitting in a user's session, is
   a product decision rather than a mechanical fix.
 
+- **Change Impact Analyzer's history list grows unboundedly for the life
+  of a session** (raised 2026-09-14). `change_impact_history.append(...)`
+  (~line 2542) has no cap, and the full list is rendered via `for prev in
+  reversed(change_history[:-1])` in an expander (~line 2573). Same class
+  of problem as the already-open "chat transcript display is never
+  trimmed" item above, but a distinct list/code path that item's wording
+  doesn't cover. Worth deciding together with that item, since both
+  likely want the same capping/paging strategy, rather than fixing this
+  one in isolation.
+
+- **"Build / Refresh RTM" unconditionally overwrites `rtm_rows` with no
+  confirmation** (raised 2026-09-14). `proj["rtm_rows"] =
+  build_rtm_rows(proj)` (~line 2478-2479) runs with no confirm prompt.
+  Low-stakes today only because Story/Test Case table edits aren't
+  persisted back to project state yet (see the already-open "Edits made
+  in the Story / Test Case `st.data_editor` tables are never written
+  back" item above) — but if that item is ever fixed, this button would
+  then silently destroy a BA's manual RTM corrections in one click.
+  Flagging now so whoever fixes that item considers pairing it with a
+  confirm-before-overwrite (or merge) here too — a design tradeoff, not
+  something to fix unilaterally tonight.
+
+- **`.docx` table extraction only dedupes horizontally-merged cells, not
+  vertically-merged ones** (raised 2026-09-14). The identity-based dedup
+  at ~line 805-818 explicitly handles a cell merged across columns in one
+  row, but python-docx returns a vertically-merged (row-spanning) cell's
+  content once per spanned row too, with no equivalent dedup for that
+  axis — a table with row-spans would duplicate that cell's text down
+  every row it visually spans in the text sent to the AI. Real gap in a
+  documented feature, but correctly tracking spans across rows is more
+  than a one-line change and affects what content reaches the AI, so
+  left for a decision rather than a guessed patch.
+
 ---
+
+## 2026-09-14
+
+**Committed**
+
+- `c54ec76` Fix "Added N document(s)" over-counting on duplicate filenames in a batch upload
+- `088ecb2` Show truncation ellipsis on the Gap Detector's notes preview
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end (all 2682
+  lines, explicitly excluding every item already sitting in Open items
+  above and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports — no drift (every top-level
+  import maps to a pinned package or the stdlib, and every pinned package
+  is used; `streamlit-authenticator` remains unused in this file by
+  design, for `auth.py`, which was not opened).
+- **Fixed — the repository-upload success message over-counted documents
+  when a batch contained duplicate filenames.** `add_doc_to_repo()`
+  replaces any existing document with the same name, so a batch with the
+  same filename twice only ever produces one distinct document in the
+  repository, but the old code incremented `added` once per loop
+  iteration with readable text rather than once per distinct name — the
+  accompanying "appeared more than once" note explained the overwrite,
+  but the headline count was still wrong. Fixed by counting
+  `len(seen_this_batch)` after the loop instead.
+- **Fixed — the Gap Detector's "Notes accounted for" preview truncated to
+  200 characters with no indicator**, unlike every other truncation
+  point in the file (all of which show an explicit notice when they cut
+  text off). Now appends "…" when the note was actually longer than the
+  preview shown.
+- Three new open items raised above: unbounded growth of the Change
+  Impact Analyzer's history list (a distinct list from the already-open
+  chat-transcript item, same class of problem); "Build / Refresh RTM"
+  silently overwriting `rtm_rows` with no confirmation (low-stakes today,
+  becomes a real risk if the already-open "edits aren't persisted" item
+  is ever fixed); and `.docx` table extraction not deduping
+  vertically-merged (row-spanning) cells, unlike its existing handling of
+  horizontally-merged ones. None are mechanical fixes — each needs a
+  design call, so none were attempted.
+- `evals/latest_report.md` is still the same stale 2026-08-18 report
+  (Nightly Evals Action still failing per the standing open item, not
+  re-investigated further tonight — no new evidence). `evals/LEARNED.md`
+  still has no entries (open or closed) — nothing to act on or close
+  there tonight.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming import lines, per standing
+  instructions. Confirmed no stale references to the deleted
+  `otp_email.py` remain anywhere in the repo (only in this log's own
+  past entries, as expected).
+- `python3 -m py_compile synergyai_app.py` and `evals/run_evals.py
+  --dry-run` both passed on the unmodified file before any change, and
+  again after each of tonight's two commits; dependencies weren't
+  preinstalled in this session's environment, so a throwaway venv was
+  created from `requirements.txt` (as in prior nights) to run the
+  dry-run check — no changes to the environment's own packages.
 
 ## 2026-09-13
 
