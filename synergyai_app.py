@@ -1839,7 +1839,6 @@ def ba_module():
             if not repo_files:
                 st.warning("Choose at least one file first.")
             else:
-                added = 0
                 seen_this_batch = set()
                 repeated_names = set()
                 overwritten_names = set()
@@ -1853,7 +1852,7 @@ def ba_module():
                             overwritten_names.add(f.name)
                         seen_this_batch.add(f.name)
                         add_doc_to_repo(proj, f.name, text, f.name.split(".")[-1].lower())
-                        added += 1
+                added = len(seen_this_batch)
                 if added:
                     msg = f"Added {added} document(s) to the repository."
                     if repeated_names:
