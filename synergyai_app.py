@@ -2165,7 +2165,12 @@ def ba_module():
                 if new_text.strip():
                     combined_parts.append(f"--- Uploaded Document: {uploaded_file.name} ---\n{new_text}")
                     if save_to_repo:
+                        replaced = any(d["name"] == uploaded_file.name for d in proj["documents"])
                         add_doc_to_repo(proj, uploaded_file.name, new_text, uploaded_file.name.split(".")[-1].lower())
+                        if replaced:
+                            st.caption(f"Replaced the existing repository document \"{uploaded_file.name}\" with this upload.")
+                        else:
+                            st.caption(f"Added \"{uploaded_file.name}\" to the project's document repository.")
 
             combined_text = "\n\n".join(combined_parts)
 
