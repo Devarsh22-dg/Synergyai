@@ -1203,7 +1203,11 @@ def fetch_url_text(url, timeout=10):
             f"This URL redirected more than {MAX_FETCH_REDIRECTS} times — giving up."
         )
 
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError:
+        resp.close()
+        raise
 
     content_type = resp.headers.get("Content-Type", "").lower()
     if content_type.startswith(("image/", "video/", "audio/", "font/")) or any(
