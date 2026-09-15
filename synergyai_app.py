@@ -2430,7 +2430,7 @@ def ba_module():
                 )
             with dl2:
                 st.download_button(
-                    "Download as CSV — Jira/Azure DevOps import format (.csv)", edited_df.to_csv(index=False).encode("utf-8-sig"),
+                    "Download as CSV (.csv)", edited_df.to_csv(index=False).encode("utf-8-sig"),
                     file_name="backlog_stories.csv", mime="text/csv", key=f"story_csv_{cp}",
                 )
 
