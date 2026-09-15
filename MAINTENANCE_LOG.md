@@ -366,7 +366,96 @@ only once it is actually decided.
   than a one-line change and affects what content reaches the AI, so
   left for a decision rather than a guessed patch.
 
+- **`get_client()`'s comment references a nonexistent `httpx2.Client`**
+  (raised 2026-09-15). The comment explaining why no custom `http_client`
+  is passed to `anthropic.Anthropic(...)` (~line 583-590, right above the
+  actual API client construction) says "newer anthropic SDKs validate
+  this argument against httpx2.Client and raise TypeError on an
+  httpx.Client" — there is no `httpx2` package in `requirements.txt` or,
+  as far as this routine could confirm, on PyPI, so this reads as a typo
+  or leftover from whatever the original diagnosis was. This is the exact
+  function involved in the 2026-08-26 production break (`7eefbd0`,
+  reverting a custom `http_client` override that had been added to chase
+  the nightly-evals connection-error investigation), and given that two
+  earlier guesses about this function's behavior already turned out wrong
+  — one of them broke production — this routine is deliberately not
+  guessing at correct replacement wording for a technical claim it can't
+  verify. Comment-only, no behavior change either way; needs Devarsh (or
+  whoever has the original SDK-version diagnosis) to supply the accurate
+  wording, or confirm it should just be deleted.
+
 ---
+
+## 2026-09-15
+
+**Committed**
+
+- `2c002da` Close the URL fetch response on an HTTP error status
+- `1dd8e81` Fix repo-upload overwrite notice suppressed by a duplicate-in-batch name
+- `6354da5` Show a notice when Gap Detector's upload is saved to the repository
+- `7e47d36` Stop overclaiming Jira/Azure DevOps import compatibility on stories CSV
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end (all 2684
+  lines, explicitly excluding every item already sitting in Open items
+  above and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports — no drift (every top-level
+  import maps to a pinned package or the stdlib, and every pinned package
+  is used; `streamlit-authenticator` remains unused in this file by
+  design, for `auth.py`, which was not opened).
+- **Fixed — the repository-upload success message never mentioned an
+  overwrite when the same filename was also repeated within the upload
+  batch.** The check was `elif f.name in existing_names`, so a name that
+  hit the "repeated in this batch" branch could never also hit the
+  "replaced an existing document" branch, even though `add_doc_to_repo`
+  overwrote the existing document either way. Changed to two independent
+  `if`s so both notices can fire together.
+- **Fixed — checking "Also add this file to the project's document
+  repository" in the Elicitation Analysis (Gap Detector) tab gave no
+  feedback at all**, unlike the equivalent upload flow in the Project &
+  Documents tab. Now shows a one-line caption saying whether the document
+  was added or replaced an existing one with the same name.
+- **Fixed — the Backlog Stories CSV download button was the only CSV
+  export in the app claiming a specific external tool's import format**
+  ("Jira/Azure DevOps import format"), but its columns are the raw story
+  fields and don't match either tool's actual bulk-import headers.
+  Relabeled to match the plain "Download as CSV (.csv)" wording every
+  other CSV button in the file already uses.
+- **Fixed — `fetch_url_text`'s final response was left open on an HTTP
+  error status.** Every other early-exit path in the function (redirect
+  loop, disallowed content-type, oversized body) already calls
+  `resp.close()` before raising; `raise_for_status()` on the last
+  response didn't, leaving the connection to be reclaimed only by GC/pool
+  timeout on any 4xx/5xx page. Not a behavior change from the caller's
+  perspective (the `HTTPError` is still raised and already handled), just
+  a resource-cleanliness fix consistent with the function's existing
+  pattern.
+- One new open item raised above: a comment in `get_client()` references
+  a nonexistent `httpx2.Client`, almost certainly a typo/leftover from the
+  original SDK-version diagnosis. Left alone deliberately — this is the
+  exact function involved in the 2026-08-26 production break, and this
+  routine isn't confident enough in the underlying technical claim to
+  guess at correct replacement wording, comment-only change or not.
+- Considered and did not report: whether `.pptx` table cell extraction
+  needs the same merge-dedup logic as `.docx` — python-pptx wasn't
+  installed in the review environment to verify whether pptx actually
+  returns duplicated text for merged cells (unlike python-docx, where it
+  confirmed does), so this was left unconfirmed rather than raised as a
+  guessed finding.
+- `evals/latest_report.md` is still the same stale 2026-08-18 report
+  (Nightly Evals Action still failing per the standing open item, no new
+  evidence tonight). `evals/LEARNED.md` still has no entries — nothing to
+  act on or close there.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming import lines, per standing
+  instructions.
+- `python3 -m py_compile synergyai_app.py` and `evals/run_evals.py
+  --dry-run` both passed on the unmodified file before any change, and
+  again after all four of tonight's commits combined; dependencies
+  weren't preinstalled in this session's environment, so a throwaway venv
+  was created from `requirements.txt` (as in prior nights) to run the
+  dry-run check — no changes to the environment's own packages.
 
 ## 2026-09-14
 
