@@ -1852,7 +1852,7 @@ def ba_module():
                     if text.strip():
                         if f.name in seen_this_batch:
                             repeated_names.add(f.name)
-                        elif f.name in existing_names:
+                        if f.name in existing_names:
                             overwritten_names.add(f.name)
                         seen_this_batch.add(f.name)
                         add_doc_to_repo(proj, f.name, text, f.name.split(".")[-1].lower())
