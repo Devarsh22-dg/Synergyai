@@ -386,6 +386,59 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-16
+
+**Committed**
+
+- `f18f8b7` Fix mojibake on text/plain Source URL fetches with no declared charset
+- `e7902ae` Stop resending failed ScopeBot replies to the model as real turns
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end (all 2694
+  lines, explicitly excluding every item already sitting in Open items
+  above and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports — no drift.
+- **Fixed — `fetch_url_text`'s `text/plain` branch had the exact mojibake
+  bug the HTML branch was fixed for on 2026-09-11 (`e19a372`).**
+  `resp.encoding = resp.encoding or "utf-8"` never actually falls back,
+  since `requests` defaults `resp.encoding` to `ISO-8859-1` (a truthy
+  value) whenever `Content-Type` omits a charset — a plain-text page
+  served with no declared charset (common) silently mojibake'd every
+  non-ASCII character. Now reuses the same `declared_charset` guard the
+  HTML path already uses: only trust `resp.encoding` when the header
+  actually named one, default to UTF-8 otherwise.
+- **Fixed — a failed ScopeBot reply was permanently baked into the chat
+  context sent back to the model.** When `chat_with_bot()` returned `None`
+  on an API error, the on-screen fallback text ("Sorry, I couldn't
+  process that...") was appended to `chat_history` exactly like a real
+  assistant turn, and `_recent_chat_messages` had no way to tell the
+  difference — so a single transient failure (rate limit, network blip)
+  stayed in the model's context for up to the next ~10 exchanges,
+  producing confused/apologetic follow-up answers with no visible cause.
+  The fallback still displays and stays in the on-screen transcript
+  unchanged; it's now flagged `is_error` and filtered out of what
+  `_recent_chat_messages` sends to the API.
+- Considered and rejected: the same review agent also flagged CSV
+  uploads as missing a UTF-8 BOM strip (`pd.read_csv(uploaded_file)`,
+  unlike the `.txt` branch's `utf-8-sig` handling). Reproduced against
+  the actual pinned `pandas==3.0.5` before touching anything: a
+  BOM-prefixed CSV's header already comes back clean (`'Name'`, not
+  `'﻿Name'`) with plain `pd.read_csv`, no `utf-8-sig` needed — this
+  version of pandas already strips it. Not a real bug; no code change
+  made. Flagging the near-miss so a future night doesn't re-propose the
+  same fix without re-checking against the pinned version first.
+- `evals/latest_report.md` is still the same stale 2026-08-18 report
+  (Nightly Evals Action still failing per the standing open item, no new
+  evidence tonight). `evals/LEARNED.md` still has no entries — nothing to
+  act on or close there.
+- This environment had no Python dependencies pre-installed at all
+  (fresh container); installed `requirements.txt` into a scratch venv to
+  actually run `py_compile` and `--dry-run` against the real packages
+  rather than skipping verification. No repository files changed by this.
+
+---
+
 ## 2026-09-15
 
 **Committed**
