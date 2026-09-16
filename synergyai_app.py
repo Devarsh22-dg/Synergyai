@@ -1699,8 +1699,11 @@ def _recent_chat_messages(history):
     model's context limit. Trimming here rather than in session_state keeps the
     user's full transcript visible while capping what actually goes over the wire.
     """
+    # Drop failed-reply placeholders before windowing: they aren't real
+    # assistant turns and shouldn't be resent to the model as if they were.
+    usable = [msg for msg in history if not msg.get("is_error")]
     trimmed = []
-    for msg in history[-MAX_CHAT_MESSAGES_SENT:]:
+    for msg in usable[-MAX_CHAT_MESSAGES_SENT:]:
         content = msg["content"]
         if len(content) > MAX_CHAT_MESSAGE_CHARS:
             content = content[:MAX_CHAT_MESSAGE_CHARS] + "\n\n[...truncated for length...]"
@@ -2688,10 +2691,15 @@ if __name__ == "__main__":
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 reply = chat_with_bot(st.session_state["chat_history"])
-            if reply:
-                st.write(reply)
-            else:
+            failed = not reply
+            if failed:
                 reply = "Sorry, I couldn't process that — please try again."
-                st.write(reply)
+            st.write(reply)
 
-        st.session_state["chat_history"].append({"role": "assistant", "content": reply})
+        # Stays visible on screen like any other turn, but is_error keeps it
+        # out of what _recent_chat_messages resends to the model — a transient
+        # failure shouldn't become a permanent phantom turn in the bot's context.
+        entry = {"role": "assistant", "content": reply}
+        if failed:
+            entry["is_error"] = True
+        st.session_state["chat_history"].append(entry)
