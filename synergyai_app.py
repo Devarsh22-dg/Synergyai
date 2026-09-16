@@ -1233,9 +1233,13 @@ def fetch_url_text(url, timeout=10):
     raw_bytes = b"".join(chunks)
 
     if "text/plain" in content_type:
-        resp.encoding = resp.encoding or "utf-8"
+        # Same fix as the HTML path below: requests defaults resp.encoding to
+        # ISO-8859-1 whenever Content-Type omits a charset, and that default
+        # is truthy, so `resp.encoding or "utf-8"` never actually falls back —
+        # only trust resp.encoding when the server declared a charset.
+        encoding = resp.encoding if "charset=" in content_type else "utf-8"
         try:
-            return raw_bytes.decode(resp.encoding, errors="ignore"), url
+            return raw_bytes.decode(encoding, errors="ignore"), url
         except (LookupError, TypeError):
             return raw_bytes.decode("utf-8", errors="ignore"), url
 
