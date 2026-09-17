@@ -84,7 +84,7 @@ DOC_TYPE_CODES = {
 # — see that module's docstring for why it's shared rather than duplicated.
 from theme import (  # noqa: E402
     NAVY, NAVY_SOFT, ACCENT, ACCENT_HOVER, TEXT, TEXT_MUTED, TEXT_MUTED_STRONG,
-    BORDER, SIDEBAR_BG, SIDEBAR_TEXT, SIDEBAR_MUTED,
+    SIDEBAR_BG, SIDEBAR_TEXT, SIDEBAR_MUTED,
 )
 
 
