@@ -386,6 +386,38 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-17
+
+**Committed**
+
+- `44fc89b` Remove unused BORDER import from theme in synergyai_app.py
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end (all 2705
+  lines, explicitly excluding every item already sitting in Open items
+  above and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports — no drift. The only finding
+  was the dead `BORDER` import fixed tonight; every other candidate it
+  initially flagged turned out to already be covered by an existing open
+  item (the six `generate_*` empty-result item covers the only
+  `pd.DataFrame(...).rename(...)` blocks still missing the
+  `reindex(fill_value="")` guard) or already fixed in a prior night's
+  entry.
+- No stale references to the deleted `otp_email.py` anywhere in the
+  codebase (only in this log's own historical entries, which is expected
+  and correctly left alone since the log is append-only).
+- `evals/latest_report.md` is still the same stale 2026-08-18 report
+  (Nightly Evals Action still failing per the standing open item, no new
+  evidence tonight). `evals/LEARNED.md` still has no entries — nothing to
+  act on or close there.
+- This environment again had no Python dependencies pre-installed (fresh
+  container); installed `requirements.txt` into a scratch venv to run
+  `py_compile` and `--dry-run` against the real packages rather than
+  skipping verification. No repository files changed by this.
+
+---
+
 ## 2026-09-16
 
 **Committed**
