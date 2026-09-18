@@ -386,6 +386,72 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-18
+
+**Committed**
+
+- `83322f2` Fix UTF-16/UTF-32 CSV uploads silently decoding as garbled
+  cp1252 text
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end (all 2705
+  lines, explicitly excluding every item already sitting in Open items
+  above and everything already fixed in prior dated entries) and
+  `requirements.txt` against actual imports — no drift (every third-party
+  import maps to a pinned package; `streamlit-authenticator` remains
+  unused in this file by design, for `auth.py`, which was not opened).
+- **Fixed — `.csv` uploads had no BOM/charset detection, unlike the `.txt`
+  branch three lines above it in the same function.** The old code tried
+  `pd.read_csv(uploaded_file)` (implicit UTF-8) and fell back to
+  `encoding="cp1252"` on any `UnicodeDecodeError`; `cp1252` maps every
+  byte 0-255 to some character, so it can never itself raise. Confirmed
+  directly against the pinned `pandas==3.0.5`: a UTF-16-encoded CSV (a
+  plausible Excel "Unicode Text" export saved with a `.csv` extension)
+  triggers the `UnicodeDecodeError` on the UTF-8 attempt as expected, but
+  the cp1252 fallback then silently produces garbage column headers/rows
+  (`ÿþN`, all-NaN data) with no error anywhere — same charset-handling bug
+  class already fixed for Source URL fetches (2026-09-05, 2026-09-16) and
+  `.txt` uploads (2026-09-13), just recurring in a third, previously-
+  uncovered code path. Fix mirrors the `.txt` branch's existing BOM-sniff
+  order (UTF-32 checked before UTF-16, since a UTF-32 LE BOM's first two
+  bytes are identical to the UTF-16 LE BOM) and hands the decoded text to
+  `pd.read_csv` via `io.StringIO`. Verified beyond compile/dry-run: ran
+  the actual `extract_text_from_upload()` end-to-end (via the evals
+  `streamlit_shim`, not isolated logic) against UTF-8, UTF-8-with-BOM,
+  UTF-16, UTF-32, and legacy cp1252 CSV bytes — all five now decode
+  correctly; also re-checked the plain `.txt` path and an unsupported
+  extension as regressions, both unaffected. Also confirmed the empty-CSV
+  edge case (`pandas.errors.EmptyDataError`, a `ValueError` subclass)
+  behaves identically before and after, so it's still caught by the
+  function's existing `except ValueError` branch.
+- No new open items raised tonight. The same review agent's other
+  observations (embedded-image bytes read before a size check in the
+  docx/pptx paths, a URL-fetch error path surfacing raw exception text,
+  case-sensitive document-repo name dedup) were all confirmed to already
+  be the same bug classes as existing Open items above (PDF image
+  decompression, raw exception text, case-sensitive name dedup
+  respectively), just recurring in adjacent spots — not logged as
+  separate new items.
+- Checked the Nightly Evals GitHub Action directly (run #47, on `6c6d0e8`,
+  last night's commit): failed with the identical
+  `[st.error] AI request failed: Connection error.` symptom on every one
+  of the 7 fixtures, same as every run since 2026-08-19. No new
+  diagnostic information — status on the standing Open items entry is
+  unchanged. `evals/latest_report.md` is still the same stale 2026-08-18
+  report; `evals/LEARNED.md` still has no entries — nothing to act on or
+  close there.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  touched or read beyond confirming import lines, per standing
+  instructions.
+- This environment again had no Python dependencies pre-installed (fresh
+  container); installed `requirements.txt` into a scratch venv to run
+  `py_compile`, `--dry-run`, and the additional targeted functional
+  verification described above against the real packages — no changes to
+  the environment's own packages.
+
+---
+
 ## 2026-09-17
 
 **Committed**
