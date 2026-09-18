@@ -1097,11 +1097,17 @@ def extract_text_from_upload(uploaded_file):
         elif ext == "pptx":
             text = extract_pptx_with_formatting(uploaded_file)
         elif ext == "csv":
-            try:
-                df = pd.read_csv(uploaded_file)
-            except UnicodeDecodeError:
-                uploaded_file.seek(0)
-                df = pd.read_csv(uploaded_file, encoding="cp1252")
+            raw = uploaded_file.read()
+            if raw[:4] in (b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff"):
+                raw_text = raw.decode("utf-32")
+            elif raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+                raw_text = raw.decode("utf-16")
+            else:
+                try:
+                    raw_text = raw.decode("utf-8-sig")
+                except UnicodeDecodeError:
+                    raw_text = raw.decode("cp1252", errors="ignore")
+            df = pd.read_csv(io.StringIO(raw_text))
             text = df.to_string(index=False) if len(df.columns) > 0 else ""
         elif ext == "xlsx":
             xls = pd.ExcelFile(uploaded_file)
