@@ -1319,6 +1319,9 @@ def build_docx_table_from_df(title, df):
 
 
 def build_docx_from_markdown(title, markdown_text):
+    def _strip_md_emphasis(text):
+        return text.replace("**", "").replace("*", "").replace("~~", "")
+
     doc = Document()
     doc.add_heading(title, level=0)
     for raw_line in markdown_text.split("\n"):
@@ -1326,19 +1329,19 @@ def build_docx_from_markdown(title, markdown_text):
         if not line:
             continue
         if line.startswith("#### "):
-            doc.add_heading(line[5:], level=4)
+            doc.add_heading(_strip_md_emphasis(line[5:]), level=4)
         elif line.startswith("### "):
-            doc.add_heading(line[4:], level=3)
+            doc.add_heading(_strip_md_emphasis(line[4:]), level=3)
         elif line.startswith("## "):
-            doc.add_heading(line[3:], level=2)
+            doc.add_heading(_strip_md_emphasis(line[3:]), level=2)
         elif line.startswith("# "):
-            doc.add_heading(line[2:], level=1)
+            doc.add_heading(_strip_md_emphasis(line[2:]), level=1)
         elif re.match(r"^[-*]\s+", line):
-            doc.add_paragraph(re.sub(r"^[-*]\s+", "", line), style="List Bullet")
+            doc.add_paragraph(_strip_md_emphasis(re.sub(r"^[-*]\s+", "", line)), style="List Bullet")
         elif re.match(r"^\d+\.\s+", line):
-            doc.add_paragraph(re.sub(r"^\d+\.\s+", "", line), style="List Number")
+            doc.add_paragraph(_strip_md_emphasis(re.sub(r"^\d+\.\s+", "", line)), style="List Number")
         else:
-            doc.add_paragraph(line.replace("**", "").replace("*", "").replace("~~", ""))
+            doc.add_paragraph(_strip_md_emphasis(line))
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()
