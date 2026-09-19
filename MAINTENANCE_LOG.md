@@ -386,6 +386,63 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-19
+
+**Committed**
+
+- `c4c803f` Fix ScopeBot's steer-back prompt naming two nonexistent module
+  names
+- `cb6aef6` Fix `build_docx_from_markdown` leaking raw markdown emphasis in
+  headings/lists
+
+**Worth knowing**
+
+- `synergyai_app.py` had not changed since last night's commit (`83322f2`),
+  and last night's entry already records a background agent reading it end
+  to end. Rather than repeat that same full pass on an unchanged file, ran
+  a second-pass review agent tonight specifically primed with the current
+  Open items list, to surface things a first full read-through could miss
+  without re-deriving (and re-reporting) the same ~25 known items. It did;
+  the two fixes above are what survived cross-referencing against that
+  list.
+- `Story Creator` / `Meeting Actionizer` (the old ScopeBot prompt wording)
+  were never real tab names in this file as far as this routine can tell —
+  this looks like the prompt was written to intended/early names that
+  drifted from the actual `st.tabs([...])` labels (~line 1789:
+  "Agile Story & Backlog Creator", "Meeting Intelligence & Actionizer"),
+  not a recent regression. Comment-and-adjacent-string fix only; no
+  behavior change beyond what ScopeBot tells users to go look for.
+- `build_docx_from_markdown` fix verified beyond compile/dry-run: called
+  directly via the evals `streamlit_shim` against a markdown sample mixing
+  `**bold**`/`*italic*`/`~~strike~~` inside a heading, a `-` bullet, a `*`
+  bullet, and a numbered item — all now export as clean text. Left one
+  related edge case unfixed and out of scope for tonight: a line with 5+
+  leading `#` (e.g. `##### Sub-heading`) still falls through to the plain
+  paragraph branch with the literal `#####` characters printed, since the
+  function only special-cases heading levels 1-4. Judged too speculative
+  to fix blind (whether the AI's document-generation prompts ever actually
+  produce a 5th-level heading is unconfirmed, and picking a heading-depth
+  cap is a small design choice, not a pure bug fix), so not logged as a
+  new open item either — flagging here only in case it turns up for real
+  later.
+- Checked the Nightly Evals GitHub Action directly (run #48, on `d37c468`,
+  last night's log commit): still `failure`, same
+  `[st.error] AI request failed: Connection error.` symptom as every run
+  since 2026-08-19. No change to the standing Open items entry.
+  `evals/latest_report.md` is still the stale 2026-08-18 report;
+  `evals/LEARNED.md` still has no entries — nothing to act on or close.
+- Confirmed `requirements.txt` still matches every third-party import in
+  `synergyai_app.py` (unchanged from last night's check; the file's import
+  lines did not change).
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv to run
+  `py_compile`, `--dry-run`, and the `build_docx_from_markdown` functional
+  check above against the real packages.
+
+---
+
 ## 2026-09-18
 
 **Committed**
