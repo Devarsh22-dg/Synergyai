@@ -67,8 +67,8 @@ CHATBOT_SYSTEM_PROMPT = (
     "BRD/FRD best practices, Agile story writing, stakeholder management, and JIRA/Azure DevOps "
     "workflows. Keep answers practical and concise (a few short paragraphs or a brief list). "
     "If a question doesn't relate to those domains, answer briefly and steer back to how "
-    "ScopeForge's modules (Elicitation Analysis, Documentation Generator, Story Creator, "
-    "Meeting Actionizer, Traceability & Change Impact) might help."
+    "ScopeForge's modules (Elicitation Analysis, Documentation Generator, Agile Story & Backlog "
+    "Creator, Meeting Intelligence & Actionizer, Traceability & Change Impact) might help."
 )
 
 DOC_TYPE_CODES = {
