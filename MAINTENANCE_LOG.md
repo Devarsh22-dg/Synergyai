@@ -110,18 +110,6 @@ only once it is actually decided.
   using the tool), and it's six-plus call sites, not one narrow fix, so
   left for Devarsh's judgment rather than an automated change.
 
-- **Every generated-table `pd.DataFrame(...).rename(...)` block implicitly
-  trusts that the AI's structured JSON matches the declared schema's
-  required fields** (raised 2026-08-29). Two concrete crash sites from
-  this pattern (Glossary, Prioritization tables) were fixed tonight by
-  adding the same `reindex(..., fill_value="")` guard every other table
-  already had; this is the broader pattern behind them. Anthropic's
-  tool-use does not strictly guarantee required fields are present, so any
-  of the remaining tables (action items, workshop agenda/questions,
-  stories) could in principle hit the same class of crash on a field the
-  model omits. Worth a shared "safe structured result" helper at some
-  point, but that's a refactor across many call sites, not a nightly fix.
-
 - **Edits made in the Story / Test Case `st.data_editor` tables are never
   written back to project state, so the RTM and Change Impact Analyzer
   silently use the stale, pre-edit AI output** (raised 2026-08-30).
@@ -366,23 +354,92 @@ only once it is actually decided.
   than a one-line change and affects what content reaches the AI, so
   left for a decision rather than a guessed patch.
 
-- **`get_client()`'s comment references a nonexistent `httpx2.Client`**
-  (raised 2026-09-15). The comment explaining why no custom `http_client`
-  is passed to `anthropic.Anthropic(...)` (~line 583-590, right above the
-  actual API client construction) says "newer anthropic SDKs validate
-  this argument against httpx2.Client and raise TypeError on an
-  httpx.Client" — there is no `httpx2` package in `requirements.txt` or,
-  as far as this routine could confirm, on PyPI, so this reads as a typo
-  or leftover from whatever the original diagnosis was. This is the exact
-  function involved in the 2026-08-26 production break (`7eefbd0`,
-  reverting a custom `http_client` override that had been added to chase
-  the nightly-evals connection-error investigation), and given that two
-  earlier guesses about this function's behavior already turned out wrong
-  — one of them broke production — this routine is deliberately not
-  guessing at correct replacement wording for a technical claim it can't
-  verify. Comment-only, no behavior change either way; needs Devarsh (or
-  whoever has the original SDK-version diagnosis) to supply the accurate
-  wording, or confirm it should just be deleted.
+---
+
+## 2026-09-20
+
+**Committed**
+
+- `ae11bf5` Guard Meeting Action Items and Workshop Agenda tables against
+  missing AI-JSON fields
+
+**Worth knowing**
+
+- **Fixed — Meeting Action Items (`action_df`, ~line 2059) and Workshop
+  Prep's Agenda table (`agenda_df`, ~line 2105) were two of the three
+  "remaining tables" named in the 2026-08-29 open item about
+  `pd.DataFrame(...).rename(...)` blocks trusting the AI's JSON to contain
+  every declared field.** Both renamed AI-returned keys to Title Case but,
+  unlike every other generated table in the file (glossary, prioritization,
+  data dictionary, as-is/to-be, test cases, RTM — six sites, all already
+  using `.reindex(columns=[...], fill_value="")`), never reindexed
+  afterward. If the AI ever omits a field across every item, these two
+  would have silently dropped or misordered a column instead of showing a
+  blank cell like every other table does. Verified standalone against the
+  exact code pattern with a synthetic item missing a key in one row: the
+  reindex guarantees the column exists (so a field the model omits across
+  every item can't crash a downstream reference to it), matching the exact
+  behavior of the already-fixed glossary table on the same input shape —
+  including its one known cosmetic limitation, a `NaN` cell (not an empty
+  string) when only *some* rows of an existing column are missing the key,
+  which is pandas' own `DataFrame` construction behavior, predates this
+  fix, and is identical across all eight sites now using this pattern.
+  Checked the third table the 2026-08-29 item named as at-risk — Workshop
+  Prep's "Questions to Ask" (~line 2115-2124) — and it turns out not to use
+  a DataFrame at all; it iterates with `q.get("category", "Other")` /
+  `q.get("question", "")`, already immune to a missing key. That leaves
+  only the Stories table still exposed to this pattern, which is already
+  fully tracked by the separate open "User Stories table shows raw dict
+  keys" item below (a different, larger fix — a display-vs-storage split,
+  not a one-line reindex) — so the 2026-08-29 item is now fully resolved
+  and removed from Open items above rather than carried forward.
+- **Correction to the 2026-09-15 open item on `get_client()`'s comment
+  (removed from Open items above, not carried forward).** That entry
+  claimed the comment's reference to `httpx2.Client` was likely a typo
+  since no such package could be found on PyPI or in `requirements.txt`.
+  Independently re-verified tonight and found that claim wrong:
+  `httpx2` is a real, current PyPI package (`httpx2==2.13.0`, "The next
+  generation HTTP client," by the original `httpx` author), and it *is* a
+  genuine transitive dependency of the pinned `anthropic==1.1.0` — the
+  Nightly Evals job's own pip-install log (run #49, last night) lists
+  `httpx2-2.13.0` being installed alongside `anthropic-1.1.0`, and
+  `pip show httpx2` in a fresh venv confirms `Required-by: anthropic`.
+  Inspected `anthropic.Anthropic.__init__`'s actual signature directly:
+  it types `http_client: httpx2.Client | None = None`, exactly matching
+  the comment's technical claim. It's not in `requirements.txt` because
+  `requirements.txt` intentionally pins only direct dependencies (see the
+  file's own header note) — `httpx2` is transitive, same as `httpcore2`,
+  `anyio`, etc. right above/below it in the same install log. So the
+  comment at ~line 583-590 needed no correction and no deletion; this was
+  a case of the routine's own prior-night conclusion being wrong, not the
+  code. No code or comment change made — flagging the correction here per
+  the log's own append-only convention rather than editing the 2026-09-15
+  entry that's no longer present now that the item is resolved.
+- Re-checked the Nightly Evals GitHub Action directly (run #49, on
+  `8b74569`, last night's log commit): still `failure`, identical
+  `[st.error] AI request failed: Connection error.` symptom on every one
+  of the 7 fixtures, same as every run since 2026-08-19. The httpx2
+  correction above doesn't explain or fix this — a fresh venv in this
+  routine's own environment installs the identical `httpx2==2.13.0` and
+  successfully reaches `api.anthropic.com` (confirmed with a deliberately
+  invalid API key: got back a real `401 AuthenticationError` from the API,
+  not a connection error), so `httpx2` itself isn't broken in general; the
+  failure is specific to something about the GitHub Actions runner's
+  network path, not a library-naming problem. No change to the standing
+  Open items entry on this — still needs Devarsh to check connectivity
+  from an actual GitHub Actions runner to `api.anthropic.com` directly.
+  `evals/latest_report.md` is still the stale 2026-08-18 report;
+  `evals/LEARNED.md` still has no entries — nothing to act on or close.
+- Confirmed `requirements.txt` still matches every third-party import in
+  `synergyai_app.py` (unchanged from prior nights' checks). Confirmed no
+  stale references to the deleted `otp_email.py` anywhere outside this
+  log's own historical entries.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv to run
+  `py_compile`, `--dry-run`, and the standalone functional verification
+  described above against the real packages.
 
 ---
 
