@@ -2060,6 +2060,7 @@ def ba_module():
                 action_df = action_df.rename(columns={
                     "action": "Action", "owner": "Owner", "due_date": "Due Date",
                 })
+                action_df = action_df.reindex(columns=["Action", "Owner", "Due Date"], fill_value="")
                 st.dataframe(action_df, use_container_width=True)
                 dl1, dl2 = st.columns(2)
                 with dl1:
@@ -2107,6 +2108,7 @@ def ba_module():
                     agenda_df = agenda_df.rename(columns={
                         "topic": "Topic", "duration_minutes": "Minutes", "purpose": "Purpose",
                     })
+                    agenda_df = agenda_df.reindex(columns=["Topic", "Minutes", "Purpose"], fill_value="")
                     st.dataframe(agenda_df, use_container_width=True, hide_index=True)
                 else:
                     st.caption("No agenda items were generated.")
