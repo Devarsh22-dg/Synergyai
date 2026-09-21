@@ -1402,6 +1402,10 @@ def analyze_gaps(text, notes=None):
     truncated_text, was_truncated = truncate(text)
     if was_truncated:
         st.caption(f"Document content was long — analyzing the first {MAX_CHARS:,} characters.")
+    if notes:
+        notes, notes_truncated = truncate(notes)
+        if notes_truncated:
+            st.caption(f"Notes were long — using the first {MAX_CHARS:,} characters.")
     system = (
         "You are a senior business analyst performing a requirements quality review. "
         "Carefully read the provided notes/documents and identify ambiguities, missing "
@@ -1428,6 +1432,9 @@ def generate_document(doc_type, context_text, user_suggestion):
     context_text, was_truncated = truncate(context_text)
     if was_truncated:
         st.caption(f"Source content was long — using the first {MAX_CHARS:,} characters.")
+    user_suggestion, suggestion_truncated = truncate(user_suggestion)
+    if suggestion_truncated:
+        st.caption(f"Instructions/focus areas were long — using the first {MAX_CHARS:,} characters.")
     system = (
         "You are a senior business analyst drafting professional project documentation. "
         "Write a well-structured, realistic first draft in Markdown. Use clear section headers. "
@@ -1447,6 +1454,9 @@ def generate_data_dictionary(context_text, user_suggestion):
     context_text, was_truncated = truncate(context_text)
     if was_truncated:
         st.caption(f"Source content was long — using the first {MAX_CHARS:,} characters.")
+    user_suggestion, suggestion_truncated = truncate(user_suggestion)
+    if suggestion_truncated:
+        st.caption(f"Instructions/focus areas were long — using the first {MAX_CHARS:,} characters.")
     system = (
         "You are a senior business analyst building a data dictionary. Identify every distinct "
         "data field/entity attribute implied by the source content and document it. Only include "
@@ -1467,6 +1477,9 @@ def generate_asis_tobe(context_text, user_suggestion):
     context_text, was_truncated = truncate(context_text)
     if was_truncated:
         st.caption(f"Source content was long — using the first {MAX_CHARS:,} characters.")
+    user_suggestion, suggestion_truncated = truncate(user_suggestion)
+    if suggestion_truncated:
+        st.caption(f"Instructions/focus areas were long — using the first {MAX_CHARS:,} characters.")
     system = (
         "You are a senior business analyst mapping a business process for an As-Is / To-Be "
         "analysis. Break the process into sequential steps. For each step, describe the current "
@@ -1583,6 +1596,12 @@ def generate_workshop_prep(project_description, focus_area, existing_context):
     existing_context, was_truncated = truncate(existing_context or "")
     if was_truncated:
         st.caption(f"Existing project context was long — using the first {MAX_CHARS:,} characters.")
+    project_description, description_truncated = truncate(project_description or "")
+    if description_truncated:
+        st.caption(f"Project description was long — using the first {MAX_CHARS:,} characters.")
+    focus_area, focus_truncated = truncate(focus_area or "")
+    if focus_truncated:
+        st.caption(f"Workshop focus area was long — using the first {MAX_CHARS:,} characters.")
     system = (
         "You are a senior business analyst preparing for a stakeholder elicitation workshop. "
         "Produce a tight, time-boxed agenda and a targeted list of open-ended elicitation "
