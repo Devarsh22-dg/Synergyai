@@ -356,6 +356,70 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-21
+
+**Committed**
+
+- `d906944` Truncate secondary free-text AI inputs (notes/suggestion/focus
+  fields) missed by the existing MAX_CHARS guard
+
+**Worth knowing**
+
+- **Fixed — five AI-call functions truncated their primary context field
+  but sent a secondary free-text field to the API completely unbounded.**
+  `analyze_gaps`'s `notes` (~line 1401, from the Gap Detector's "Additional
+  Notes / Context" `st.text_area`, ~line 2162), `generate_document` /
+  `generate_data_dictionary` / `generate_asis_tobe`'s `user_suggestion`
+  (~lines 1427/1446/1466, from the Documentation Generator's "Provide
+  specific instructions or focus areas" `st.text_area`, ~line 2294), and
+  `generate_workshop_prep`'s `project_description` / `focus_area` (~line
+  1582, from `proj["description"]`'s `st.text_area` at ~line 1816 and the
+  Workshop Prep `st.text_input` at ~line 2088) all had no `truncate()`
+  guard, unlike every sibling primary-context field in the same functions
+  and unlike `change_request_text` (fixed 2026-09-10, same bug class).
+  None of these fields have a `max_chars` on their widget, so a BA pasting
+  a very large block into any of them sent it to the API completely
+  unbounded. Not a design decision: the fix is the identical
+  `truncate()`/`MAX_CHARS`/`st.caption` idiom already used everywhere else
+  in the file, just applied to five sites that were missed — no new
+  threshold or wording judgment call involved.
+  Verified beyond compile/dry-run: loaded the real module through the
+  evals `streamlit_shim` (not isolated logic), monkeypatched
+  `call_structured`/`call_text` to capture the actual outbound prompt, and
+  confirmed a 300,000-character input to each of the five fields now
+  produces a prompt bounded to ~`MAX_CHARS` plus fixed template text
+  (previously it would have been sent in full); also confirmed a normal
+  short input passes through completely unmodified (no spurious
+  truncation or caption) as a regression check.
+  One self-inflicted slip caught and fixed before committing: the first
+  attempt at the `generate_data_dictionary` edit dropped a space between
+  two sentences in that function's system prompt ("data dictionary.Identify"
+  instead of "data dictionary. Identify") — an artifact of the edit tool's
+  string match, not a deliberate change. Caught by reviewing `git diff`
+  before running any checks; fixed immediately, confirmed clean in the
+  final diff and the functional verification above.
+- Checked the Nightly Evals GitHub Action directly (run #50, on `a3c2d72`,
+  last night's log commit): still `failure`, same standing symptom as
+  every run since 2026-08-19. No new evidence gathered tonight beyond
+  confirming the status is unchanged — the 2026-09-20 entry already did
+  the deep root-cause work, and this entry's own reasoning (no new guess
+  without new evidence) still applies. `evals/latest_report.md` is still
+  the stale 2026-08-18 report; `evals/LEARNED.md` still has no entries —
+  nothing to act on or close.
+- Confirmed `requirements.txt` still matches every third-party import in
+  `synergyai_app.py` (unchanged from prior nights' checks; also
+  independently re-verified by grepping the file's own top-level imports).
+  Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  actual code (only in this log's own historical entries, as expected).
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv to run
+  `py_compile`, `--dry-run`, and the standalone functional verification
+  described above against the real packages.
+
+---
+
 ## 2026-09-20
 
 **Committed**
