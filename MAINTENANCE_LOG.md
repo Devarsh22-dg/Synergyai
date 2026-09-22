@@ -356,6 +356,56 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-22
+
+**Committed**
+
+Nothing committed tonight (aside from this log entry).
+
+**Worth knowing**
+
+- Read `synergyai_app.py` (all 2,735 lines) end to end against the current
+  Open items list above, plus `requirements.txt`, looking for actual bugs,
+  missing error handling, small copy/UX polish, or requirements-vs-imports
+  drift. Nothing new and independently safe turned up: every gap found
+  during the read either matched an item already open above (e.g. the
+  2,000-char silent truncation in Documentation Generator/Story Creator,
+  the dashboard counter semantics, the markdown-injection-via-user-text
+  spots) or wasn't a real issue on closer inspection (e.g. the per-category
+  question loop in Workshop Prep is O(n·m) but n and m are both small
+  AI-returned lists, not a real cost). Rather than pad the diff, made no
+  code change tonight — see the routine's own standing instruction that a
+  quiet night's log entry is the deliverable, not a liability.
+- Specifically checked for XSS-style injection via unescaped project names
+  in `unsafe_allow_html=True` blocks (`section_header`, masthead, sidebar
+  markup): the only two call sites that interpolate the user-editable
+  project name (`cp`) already run it through `html.escape()` (lines ~1762,
+  ~1822); every other `unsafe_allow_html` block uses only static text. No
+  gap found there.
+- Confirmed `requirements.txt` still matches every third-party import in
+  `synergyai_app.py`, `auth.py`, and `db.py` (installed a fresh scratch
+  venv from `requirements.txt` and cross-checked against each file's
+  `import`/`from` lines directly — no drift in either direction).
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — the
+  Nightly Evals Action has never actually scored a fixture since
+  2026-08-18 (see the standing open item below), so there's no confirmed
+  AI-output regression to act on. `evals/latest_report.md` is still the
+  same stale 2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #51, on `78bebb5`,
+  last night's log commit): still `failure`, same standing symptom as
+  every run since 2026-08-19 (run #50, #49, ... unchanged). No new evidence
+  gathered tonight — still needs Devarsh to check connectivity from an
+  actual GitHub Actions runner to `api.anthropic.com`, per the existing
+  open item.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv to run
+  `python3 -m py_compile synergyai_app.py` and
+  `python3 evals/run_evals.py --dry-run` — both passed clean.
+
+---
+
 ## 2026-09-21
 
 **Committed**
