@@ -912,7 +912,7 @@ def extract_pdf_with_annotations(uploaded_file, describe_images=True):
             obj = a.get_object()
             contents = obj.get("/Contents")
             if contents and str(contents).strip():
-                annotation_lines.append(f"- {obj.get('/T', 'Unknown reviewer')}: {contents}")
+                annotation_lines.append(f"- {obj.get('/T') or 'Unknown reviewer'}: {contents}")
     if annotation_lines:
         text += "\n\n--- Reviewer Comments (from PDF annotations) ---\n" + "\n".join(annotation_lines)
 
