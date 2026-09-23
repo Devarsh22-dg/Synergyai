@@ -356,6 +356,64 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-23
+
+**Committed**
+
+- `72fa0c8` Fix PDF annotation author fallback to trigger on empty, not just
+  missing, `/T`
+
+**Worth knowing**
+
+- **Fixed — `extract_pdf_with_annotations()` (~line 915) used
+  `obj.get('/T', 'Unknown reviewer')`, which only substitutes the fallback
+  when the PDF annotation's `/T` (author) key is absent entirely.** Some
+  annotation tools write a present-but-empty `/T ()` field, which this
+  pattern doesn't catch, rendering the line as `- : <comment text>` with no
+  author label. The equivalent Word-comment path six lines away (~line 857)
+  already uses `c.author or 'Unknown reviewer'` specifically to cover the
+  falsy/empty-string case too — this brings the PDF path in line with the
+  already-agreed-upon behavior right next to it. Not a design decision:
+  same one-line `x.get(k) or default` idiom already used elsewhere in the
+  file, applied to a spot that was missed. Verified standalone (outside
+  `py_compile`/dry-run) with a synthetic dict exercising empty string,
+  missing key, and a normal value, confirming all three now resolve to the
+  expected label; `py_compile` and `evals/run_evals.py --dry-run` both
+  passed clean before and after.
+- Delegated a full, fresh line-by-line read of all ~2,735 lines of
+  `synergyai_app.py` plus `requirements.txt` (cross-checked against the
+  current Open Items list to avoid re-raising anything already tracked);
+  the fix above was the only new, independently-safe finding. Everything
+  else checked — AI-call helpers, all `generate_*`/`analyze_*` functions,
+  `.docx`/`.pptx`/`.pdf`/`.txt`/`.csv`/`.xlsx` parsing, the archive/
+  decompression-bomb guard, `fetch_url_text`'s SSRF guard, chat-history
+  windowing, project-state management, every `st.data_editor` table and
+  its downstream use — matched an already-open item or wasn't a real gap
+  on closer inspection.
+- Confirmed `requirements.txt` still matches every third-party import in
+  `synergyai_app.py`, `auth.py`, and `db.py` (parsed each file's AST
+  directly rather than eyeballing import lines). No drift found.
+- Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  the repo outside this log's own historical entries.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — the
+  Nightly Evals Action still hasn't scored a fixture since 2026-08-18 (see
+  standing open item below), so there's no confirmed AI-output regression
+  to act on. `evals/latest_report.md` is still the same stale 2026-08-18
+  report.
+- Checked the Nightly Evals GitHub Action directly (run #52, on `acc9e35`,
+  last night's log commit): still `failure`, same standing symptom as
+  every run since 2026-08-19. No new evidence gathered tonight — per the
+  standing item's own reasoning, a third guess isn't warranted without new
+  evidence, and none turned up.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.15, matching CI) to run `py_compile`, `--dry-run`, and the
+  standalone functional verification above against the real packages.
+
+---
+
 ## 2026-09-22
 
 **Committed**
