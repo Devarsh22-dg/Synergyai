@@ -356,6 +356,61 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-24
+
+**Committed**
+
+Nothing committed tonight (aside from this log entry).
+
+**Worth knowing**
+
+- A background review agent read `synergyai_app.py` end to end (all 2735
+  lines) plus `requirements.txt` and the top-of-file imports of `auth.py`/
+  `db.py` only (nothing else in those two files, per standing
+  instructions), explicitly excluding every item already on the Open items
+  list above and everything already fixed in prior dated entries. No new,
+  independently-safe finding survived review.
+- Two leads the agent chased and disproved, recorded here so a future night
+  doesn't re-investigate the same dead ends: (1) whether
+  `_recent_chat_messages` (~line 1722-1743) dropping `is_error`-flagged
+  assistant turns before sending chat history to the API could leave two
+  consecutive `user` messages in a row and violate the Anthropic Messages
+  API's role-alternation requirement, permanently degrading ScopeBot after
+  one transient failure — checked against current Anthropic API
+  documentation: consecutive same-role messages are explicitly allowed and
+  get merged into a single turn server-side, not a bug; (2) whether
+  removing a repository document (~line 1921-1923) could leave a stale
+  filename in one of the four repo-document multiselect widgets'
+  session-state-persisted selection (~lines 1996, 2160, 2294, 2427) after
+  `options` shrinks, crashing the widget with a `StreamlitAPIException` —
+  verified empirically with `streamlit.testing.v1.AppTest` against the
+  pinned `streamlit==1.62.0`: Streamlit silently drops the stale value from
+  the returned selection instead of raising, not a bug.
+- Confirmed `requirements.txt` still matches every third-party import in
+  `synergyai_app.py`, `auth.py`, and `db.py` (parsed each file's AST
+  directly). No drift.
+- Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  the repo outside this log's own historical entries.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — the
+  Nightly Evals Action still hasn't scored a fixture since 2026-08-18 (see
+  the standing open item above), so there's no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the same stale
+  2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #53, on `62d4a62`,
+  last night's log commit): still `failure`, identical
+  `[st.error] AI request failed: Connection error.` symptom on all 7
+  fixtures, same as every run since 2026-08-19. No new evidence gathered
+  tonight — per the standing item's own reasoning, a third guess isn't
+  warranted without new evidence, and none turned up.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched beyond confirming import lines, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (matching
+  CI's Python 3.11) to run `py_compile` and `--dry-run` against the real
+  packages — both passed clean on the unmodified file.
+
+---
+
 ## 2026-09-23
 
 **Committed**
