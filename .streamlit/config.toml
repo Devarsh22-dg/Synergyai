@@ -8,3 +8,9 @@ backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F3F4F6"
 textColor = "#111827"
 font = "sans serif"
+
+# Matches synergyai_app.py's own MAX_UPLOAD_BYTES (20MB). Without this,
+# Streamlit's default 200MB ceiling lets an oversized file be fully
+# buffered server-side before the app's own size check ever runs.
+[server]
+maxUploadSize = 20
