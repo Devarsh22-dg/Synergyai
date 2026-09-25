@@ -356,6 +356,61 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-25
+
+**Committed**
+
+- `8f58e00` Cap Streamlit server upload size to match app's own
+  MAX_UPLOAD_BYTES
+
+**Worth knowing**
+
+- **Fixed — `.streamlit/config.toml` had no `[server]` section, so
+  Streamlit's platform-level upload ceiling stayed at its default 200MB,
+  far above the 20MB `MAX_UPLOAD_BYTES` the app already enforces in
+  `extract_text_from_upload()` (~line 1067).** The app's own check only
+  runs after Streamlit has fully accepted and buffered an upload, so with
+  `accept_multiple_files=True` on the repository uploader (~line 1871) a
+  user could select several files up to 200MB each, all buffered into
+  server memory before the app's 20MB check ever ran on any of them. Not
+  a design decision: the app had already picked the number (20MB); this
+  just wires that same number into the one config knob (`maxUploadSize =
+  20`) that actually gates uploads before app code runs — no new number
+  chosen, no tradeoff weighed. Verified the file still parses as valid
+  TOML (`tomllib.load`) with `server.maxUploadSize == 20` after the edit.
+  `.streamlit/config.toml` is outside `synergyai_app.py`/`auth.py`/
+  `db.py`, so this doesn't touch anything on the off-limits list.
+- Delegated a full, fresh line-by-line read of all ~2,736 lines of
+  `synergyai_app.py` plus `requirements.txt`, explicitly given the
+  current Open items list to avoid re-raising anything already tracked.
+  The upload-size-cap gap above was the only new, independently-safe
+  finding; everything else matched an already-open item (e.g. CSV
+  upload's cp1252 fallback is the same pattern as the already-open
+  `.txt` item) or was checked and found not to be a real issue (e.g. the
+  devcontainer's disabled CORS/XSRF is an intentional Codespaces-proxy
+  workaround, not a bug; a one-off-by-one in `MAX_FETCH_REDIRECTS` and a
+  PIL CMYK/Adobe-JPEG conversion quirk were both judgment-laden, not
+  mechanical, so left unfixed).
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan (not just trusting last night's note). No drift found.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #54, on
+  `f8f892a`, last night's log commit): still `failure`, same standing
+  symptom as every run since 2026-08-19. No new evidence gathered
+  tonight — per the standing item's own reasoning, no new guess is
+  warranted without new evidence.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  opened or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.15, matching CI) to run `py_compile` and `--dry-run` against the
+  real packages, both before and after the fix — all passed clean.
+
+---
+
 ## 2026-09-24
 
 **Committed**
