@@ -356,6 +356,50 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-26
+
+**Committed**
+
+Nothing committed tonight (aside from this log entry).
+
+**Worth knowing**
+
+- `synergyai_app.py` had not changed since `72fa0c8` (2026-09-23) — the
+  last two nights already covered it with fresh full read-throughs and
+  found nothing new. Rather than skip a third pass, delegated another
+  independent full line-by-line read (all 2,735 lines) explicitly primed
+  with the current Open items list and the "already fixed" history, to
+  avoid re-deriving/re-reporting known items. It found nothing new and
+  independently safe. Notable near-misses it ruled out rather than
+  re-raised: the Business Glossary's `st.data_editor` (~line 2022) has the
+  identical edits-never-written-back gap as the already-open Story/Test
+  Case editors item (a third table hitting the same architecture gap, not
+  a distinct new item); `.docx`/`.pptx` embedded images are decompressed
+  before the size check the same way PDF images are (already covered by
+  the open PDF-image item, same class); and it positively verified
+  python-pptx does *not* duplicate merged-cell text the way python-docx
+  does, so the already-fixed `.docx` merge-dedup logic correctly has no
+  `.pptx` equivalent needed.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan. No drift.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #55, on `e15f89d`,
+  last night's log commit): still `failure`, same standing symptom as
+  every run since 2026-08-19. No new evidence gathered tonight — per the
+  standing item's own reasoning, no new guess is warranted without new
+  evidence.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11, matching CI) to run `py_compile` and `--dry-run` against the real
+  packages — both passed clean.
+
+---
+
 ## 2026-09-25
 
 **Committed**
