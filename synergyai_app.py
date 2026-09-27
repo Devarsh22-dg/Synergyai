@@ -1750,7 +1750,10 @@ def chat_with_bot(history):
     if proj.get("description"):
         context_note += f" Project description: {proj['description'][:500]}"
     if proj.get("documents"):
-        doc_names = ", ".join(d["name"] for d in proj["documents"][:10])
+        docs = proj["documents"]
+        doc_names = ", ".join(d["name"] for d in docs[:10])
+        if len(docs) > 10:
+            doc_names += f" (+{len(docs) - 10} more)"
         context_note += f" Documents in this project's repository: {doc_names}."
     return call_chat(CHATBOT_SYSTEM_PROMPT + context_note,
                      _recent_chat_messages(history), max_tokens=800)
