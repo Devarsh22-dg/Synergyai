@@ -354,6 +354,87 @@ only once it is actually decided.
   than a one-line change and affects what content reaches the AI, so
   left for a decision rather than a guessed patch.
 
+- **`.docx` embedded-image extraction order isn't guaranteed to be reading
+  order, so a vision description could be numbered against the wrong
+  image** (raised 2026-09-27). `extract_docx_with_formatting()` (~line
+  862-870) collects embedded images by iterating `doc.part.rels.values()`
+  — package relationship order, not the order images appear when reading
+  the document top-to-bottom. The PPTX extractor (`_iter_pptx_shapes`,
+  ~line 944-958) walks shapes in visual/slide order and the PDF extractor
+  (~line 919-930) walks pages in order — both preserve true document
+  order; the DOCX path doesn't have an equivalent. `describe_images_with_
+  vision()`'s prompt (~line 750-759) tells the vision model the images are
+  given "in order" and both it and the caller (~line 875) number
+  descriptions on that assumption. If a `.docx`'s rels order ever diverges
+  from reading order (images anchored in headers/footers, non-sequential
+  edits, a file re-saved by a non-Word tool), the numbered description text
+  a BA sees could get silently attached to the wrong image — and since the
+  loop also caps at `MAX_IMAGES_PER_DOC`, the images chosen for description
+  might not even be the first N by reading order. Same risk class as the
+  already-open PDF/docx-pptx decompression-bomb items (plausible but
+  unverified without testing against a real adversarially-ordered `.docx`),
+  and the fix (sorting by body-anchor position) is more than a one-line
+  change, so left for a decision rather than a guessed patch.
+
+---
+
+## 2026-09-27
+
+**Committed**
+
+- `beff96b` Show a "+N more" indicator when ScopeBot's project context
+  truncates the document list
+
+**Worth knowing**
+
+- **Fixed — `chat_with_bot()` (~line 1746-1756) silently capped the
+  document list sent to ScopeBot's system context at 10 names
+  (`proj["documents"][:10]`) with no trace anything was dropped, unlike
+  every other truncation point in the file (the `truncate()`/`MAX_CHARS`
+  path always shows an `st.caption`).** A project with more than 10
+  repository documents had ScopeBot silently unaware of the rest, with no
+  way for a BA to know its answers about "what's in the repository" were
+  based on a partial list. Not a design decision: purely additive text (a
+  `" (+N more)"` suffix) appended only when the list is actually
+  truncated; a project with 10 or fewer documents is byte-for-byte
+  unaffected. Verified standalone (outside `py_compile`/dry-run) with 13
+  synthetic documents (confirmed the suffix appears with the correct
+  count) and 5 (confirmed no suffix, output unchanged) before committing.
+- New open item raised (see above): `.docx` embedded-image extraction
+  order isn't guaranteed to match reading order, unlike the PPTX/PDF
+  extractors, which could misattribute a vision description to the wrong
+  image. Flagged by the same review pass that found the fix above;
+  plausible but needs verification against a real adversarially-ordered
+  file before any fix, so left open rather than guessed at.
+- Delegated a full, fresh line-by-line read of all ~2,738 lines of
+  `synergyai_app.py`, explicitly primed with the current Open items list
+  and the "already fixed" history to avoid re-deriving/re-reporting known
+  items. The fix and new open item above are what survived; every other
+  candidate it chased (redirect/timeout handling, archive-bomb guards,
+  chat trimming, RTM fuzzy matching, encoding fallbacks, filename/
+  case-sensitivity issues, markdown-echo of user text) mapped onto an
+  already-tracked item or the already-fixed list.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan. No drift.
+- Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  the repo outside this log's own historical entries.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #56, on
+  `2454129`, last night's log commit): still `failure`, same standing
+  symptom as every run since 2026-08-19 (harness step fails, "Commit
+  results" and "Check quality gate" steps skipped). No new evidence
+  gathered tonight — per the standing item's own reasoning, no new guess
+  is warranted without new evidence.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.15, matching CI) to run `py_compile` and `--dry-run` against the
+  real packages, both before and after the fix — all passed clean.
+
 ---
 
 ## 2026-09-26
