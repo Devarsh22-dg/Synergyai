@@ -83,7 +83,7 @@ DOC_TYPE_CODES = {
 # Palette lives in theme.py so auth.py's login page uses the exact same values
 # — see that module's docstring for why it's shared rather than duplicated.
 from theme import (  # noqa: E402
-    NAVY, NAVY_SOFT, ACCENT, ACCENT_HOVER, TEXT, TEXT_MUTED, TEXT_MUTED_STRONG,
+    NAVY_SOFT, ACCENT, ACCENT_HOVER, TEXT, TEXT_MUTED, TEXT_MUTED_STRONG,
     SIDEBAR_BG, SIDEBAR_TEXT, SIDEBAR_MUTED,
 )
 
