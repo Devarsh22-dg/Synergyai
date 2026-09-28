@@ -376,6 +376,104 @@ only once it is actually decided.
   and the fix (sorting by body-anchor position) is more than a one-line
   change, so left for a decision rather than a guessed patch.
 
+- **A failed AI regeneration redisplays the previous successful result
+  right below the error banner, with no indication it's stale** (raised
+  2026-09-28). The pattern `result = proj.get(...); if result: <render as
+  a completed, successful-looking result>` repeats across ~7 panels:
+  Meeting Intelligence (~line 2064-2099), Gap Analysis (~2227-2244),
+  Documentation Generator (~2345-2418), Story Creator (~2459), Test Case
+  Generator (~2491), Business Glossary (~2017), and Change Impact Analyzer
+  (~2597-2621). Each reads whatever's already in `proj[...]` regardless of
+  whether *this* button click produced it. If a user clicks "Analyze," the
+  AI call fails (`call_structured` already shows its own `st.error(...)`),
+  and the function returns `None`, nothing clears the old result — the
+  *previous* successful run (possibly against different source content) is
+  still sitting in `proj[...]` and renders right under the error banner
+  with its own "✅ ... generated" success message, with nothing marking it
+  as leftover from an earlier, unrelated run. Distinct from the already-open
+  raw-exception-text item (that's about the error message itself) and the
+  six-`generate_*`-functions item (that's about a *valid empty* result
+  giving no feedback) — here the user does see an error, but then also sees
+  an unrelated old success card right after it, which could read as "it
+  actually worked." Fixing it means deciding whether to clear the stale
+  result on failure, badge it as "from an earlier run," or leave the
+  current behavior as intentional — a UX call across seven call sites, not
+  a mechanical one-line patch.
+
+- **Document-repository filenames are deduped case-sensitively, the same
+  issue as the open project-name item but at a different call site**
+  (raised 2026-09-28). `add_doc_to_repo` (~line 547-557): uploading
+  `Requirements.docx` then `requirements.docx` creates two separate
+  repository entries instead of treating the second as a replacement —
+  same tradeoff already open above as "New project names are deduplicated
+  case-sensitively" (2026-09-13), just recurring at the document-repo
+  layer rather than the project-name layer. Flagging as a second call site
+  in case it wasn't considered part of that same decision; worth deciding
+  together rather than separately, same as the chat-history/change-impact-
+  history pairing above.
+
+---
+
+## 2026-09-28
+
+**Committed**
+
+- `aab0ea9` Remove unused NAVY import from theme in synergyai_app.py
+
+**Worth knowing**
+
+- **Fixed — `NAVY` was imported from `theme` (~line 86) but never
+  referenced anywhere in the file; only `NAVY_SOFT` (used at ~lines 144,
+  147) is actually needed.** Same dead-import class as the `BORDER` import
+  removed 2026-09-17, just a different name that slipped back in since.
+  `NAVY` itself is untouched in `theme.py` and still available to
+  `auth.py`'s login page, which was not opened. Verified via AST-walk plus
+  a word-boundary grep that `NAVY` appears exactly once in the file (the
+  import line itself) after the edit, and that every other name in the
+  same import tuple is still genuinely used; `py_compile` and
+  `evals/run_evals.py --dry-run` both passed clean before and after.
+- Two new open items raised (see above): (1) a failed AI regeneration in
+  ~7 panels redisplays the previous successful result right under the
+  error banner with no staleness indicator — a user could read the old
+  "✅ generated" card as evidence the failed attempt actually worked; (2)
+  document-repository filename dedup is case-sensitive, the same tradeoff
+  as the already-open project-name dedup item but at a different call
+  site — flagged to be decided together rather than raised as a wholly
+  separate item.
+- Delegated a full, fresh line-by-line read of all ~2,739 lines of
+  `synergyai_app.py`, explicitly primed with the current Open items list
+  and the "already fixed" history to avoid re-deriving/re-reporting known
+  items. The fix and two new open items above are what survived; a minor
+  DRY nit (BOM/charset-decoding logic duplicated between the `.txt` and
+  `.csv` branches of `extract_text_from_upload`) was also noted but judged
+  low-priority polish, not a bug, and left untouched rather than risking a
+  speculative refactor across two working code paths. Every other
+  candidate it chased (stale multiselect state, RTM/Change Impact reading
+  un-written-back editor state, the 2,000-char carryover truncation, SSRF/
+  decompression-bomb guards) mapped onto an already-tracked item or a
+  documented, intentional limitation.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan (and a grep-only check of `auth.py`'s/`db.py`'s import
+  lines — their logic was not opened). No drift.
+- Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  the repo outside this log's own historical entries.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #57, on `a4072d6`,
+  last night's log commit): still `failure`, identical
+  `[st.error] AI request failed: Connection error.` symptom on every
+  fixture, same as every run since 2026-08-19. No new evidence gathered
+  tonight — per the standing item's own reasoning, no new guess is
+  warranted without new evidence.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.15, matching CI) to run `py_compile` and `--dry-run` against the
+  real packages, both before and after the fix — all passed clean.
+
 ---
 
 ## 2026-09-27
