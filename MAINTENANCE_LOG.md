@@ -412,6 +412,117 @@ only once it is actually decided.
   together rather than separately, same as the chat-history/change-impact-
   history pairing above.
 
+- **Generating a different Document Type silently discards the previous
+  draft, with no warning, while the "Documents Drafted" counter implies
+  history is preserved** (raised 2026-09-29). `default_project()`'s
+  `last_doc_draft`/`last_doc_type` (~lines 515-516) are single top-level
+  slots shared across all 5 types in `DOC_TYPE_CODES` (BRD, FRD, Data
+  Dictionary, Use Cases, As-Is/To-Be); the Documentation Generator tab
+  (~lines 2343-2359) writes into the same pair of slots regardless of
+  which type was selected. Generating a BRD, then switching the "Select
+  Document Type to Draft" dropdown and generating a Data Dictionary,
+  permanently loses access to the BRD draft for the rest of the session
+  with no confirmation — yet `documents_drafted` (same three call sites)
+  keeps incrementing on every successful generation regardless of type, so
+  the dashboard metric ("Documents Drafted: 2") implies two retrievable
+  drafts exist when only the most recent one does. Distinct from the
+  already-open dashboard-counter-semantics item above (that one is only
+  about increment-vs-reassign math, not data loss) and the RTM-overwrite
+  item above (that one keeps the RTM's own single artifact type; this
+  loses a *different* document type's content entirely). Fixing it means
+  choosing between a dict keyed by `doc_type` (keeps all 5 drafts
+  simultaneously) vs. a single slot with an explicit "generating a new
+  document type will replace your last draft" warning before overwriting
+  — a product decision, not a mechanical fix, and touches the
+  render/download branch structure for that tab (~lines 2361 onward).
+
+---
+
+## 2026-09-29
+
+**Committed**
+
+- `40cb345` Sanitize control characters before writing Excel/Word exports
+
+**Worth knowing**
+
+- **Fixed — `build_xlsx_from_df`, `build_docx_table_from_df`, and
+  `build_docx_from_markdown` had no defense against XML/Excel-illegal
+  control characters (`\x00-\x08`, `\x0B-\x0C`, `\x0E-\x1F`) reaching a
+  cell or paragraph value.** openpyxl raises `IllegalCharacterError` and
+  python-docx/lxml raises `ValueError: All strings must be XML
+  compatible...` for this exact character class. These builders are
+  evaluated eagerly as inline `st.download_button(...)` arguments on every
+  rerun where a result panel is showing, with zero try/except at any of
+  the ~14 call sites — so a single stray control character anywhere in an
+  editable table (stories, test cases, glossary, RTM, prioritization, data
+  dictionary, As-Is/To-Be) or in a generated document draft crashed that
+  tab's render outright. Reachable in practice, not just hypothetically: a
+  BA routinely copy/pastes text from PDFs into these editable tables (a
+  common source of stray form-feed/vertical-tab characters), and
+  malformed PDFs occasionally yield stray control characters via
+  `pypdf.extract_text()` that the AI can echo verbatim into a generated
+  field. Fixed by adding `_strip_illegal_xml_chars()` and routing every
+  cell/header/heading/paragraph value in the three builders through it (via
+  `_blank_or_value` for row values, and directly at the header/title/line
+  sites that bypass it) — pure defensive sanitization, no product/UX
+  judgment involved, same class as the existing `.txt`/`.csv`
+  encoding-fallback guards elsewhere in the file. Verified beyond
+  compile/dry-run: reproduced the original crash standalone (both
+  `IllegalCharacterError` and the docx `ValueError`) against a
+  `\x0b`/`\x0c`-containing DataFrame and a control-character-containing
+  markdown draft before the fix, confirmed all three builders now
+  succeed and produce valid output after it, and confirmed normal
+  values (plain strings, `None`, numbers) are byte-for-byte unaffected as
+  a regression check. `py_compile` and `evals/run_evals.py --dry-run`
+  both passed clean before and after.
+- New open item raised (see above): generating a different Document Type
+  in the Documentation Generator tab silently discards the previous
+  draft (single shared slot across all 5 types), while the "Documents
+  Drafted" counter keeps incrementing as if each generation were
+  additive — found by the same review pass that found the fix above;
+  needs a product decision on per-type storage vs. an overwrite warning,
+  not a mechanical fix.
+- Also considered and deliberately left unflagged as a new open item: no
+  length cap on the Project Name / Client / Stakeholder / Description
+  free-text fields (~lines 1829-1845), unlike every AI-input field in the
+  file (all routed through `truncate()`/`MAX_CHARS`). Judged genuinely
+  low-priority polish rather than a decision-worthy gap — these fields
+  aren't sent to the AI unbounded in the same high-volume way the tracked
+  fields are, and no concrete failure mode surfaced beyond "unbounded in
+  principle" — so noting it here rather than padding the Open items list
+  with something this minor.
+- Delegated a full, fresh line-by-line read of all 2,738 lines of
+  `synergyai_app.py`, explicitly primed with the current Open items list
+  (all 26 entries) and the "already fixed" history to avoid re-deriving/
+  re-reporting known items. The fix and the one new open item above are
+  what survived; everything else it found either matched an already-open
+  item or was independently checked and confirmed correct (BOM-detection
+  ordering, the `fetch_url_text` redirect-count loop, empty-password PDF
+  decryption handling, `.docx` horizontal-merge dedup).
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan (own pass, not just trusting the delegated review). No
+  drift.
+- Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  the repo outside this log's own historical entries.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #58, on
+  `3eff651`, last night's log commit): still `failure`, identical
+  symptom to every run since 2026-08-19 (harness step fails; "Commit
+  results" and "Check quality gate" steps skipped). No new evidence
+  gathered tonight — per the standing item's own reasoning, no new guess
+  is warranted without new evidence.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.15, matching CI) to run `py_compile`, `--dry-run`, and the
+  standalone functional verification above against the real packages,
+  both before and after the fix — all passed clean.
+
 ---
 
 ## 2026-09-28
