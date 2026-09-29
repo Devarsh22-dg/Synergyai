@@ -1272,14 +1272,30 @@ def truncate(text, limit=MAX_CHARS):
     return text, False
 
 
+_ILLEGAL_XML_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
+
+
+def _strip_illegal_xml_chars(s):
+    """Strips control characters that openpyxl/python-docx reject outright
+    (IllegalCharacterError / "All strings must be XML compatible"). These can
+    reach a cell or paragraph via a pasted PDF excerpt, a stray pypdf
+    extraction artifact, or AI output echoing source text verbatim, and
+    would otherwise crash the export on an otherwise-successful generation."""
+    return _ILLEGAL_XML_CHARS_RE.sub("", s)
+
+
 def _blank_or_value(v):
     """Guards against pd.isna() raising on a non-scalar cell (e.g. a list/dict that
     slipped through from an AI response field expected to be a plain string) — such a
     value is never actually NaN, so it's stringified instead of being checked, which
     also keeps it writable as a single Excel/Word cell value."""
     if isinstance(v, (list, dict)):
-        return str(v)
-    return "" if pd.isna(v) else v
+        v = str(v)
+    elif pd.isna(v):
+        return ""
+    if isinstance(v, str):
+        return _strip_illegal_xml_chars(v)
+    return v
 
 
 # --- File Building (generating downloads) ---
@@ -1288,7 +1304,7 @@ def build_xlsx_from_df(sheet_name, df):
     wb = Workbook()
     ws = wb.active
     ws.title = (sheet_name or "Sheet1")[:31]
-    ws.append([str(c) for c in df.columns])
+    ws.append([_strip_illegal_xml_chars(str(c)) for c in df.columns])
     for cell in ws[1]:
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill(start_color="1F2333", end_color="1F2333", fill_type="solid")
@@ -1308,7 +1324,7 @@ def build_docx_table_from_df(title, df):
     table.style = "Light Grid Accent 1"
     hdr_cells = table.rows[0].cells
     for i, col in enumerate(df.columns):
-        hdr_cells[i].text = str(col)
+        hdr_cells[i].text = _strip_illegal_xml_chars(str(col))
     for _, row in df.iterrows():
         cells = table.add_row().cells
         for i, v in enumerate(row.tolist()):
@@ -1323,9 +1339,9 @@ def build_docx_from_markdown(title, markdown_text):
         return text.replace("**", "").replace("*", "").replace("~~", "")
 
     doc = Document()
-    doc.add_heading(title, level=0)
+    doc.add_heading(_strip_illegal_xml_chars(title), level=0)
     for raw_line in markdown_text.split("\n"):
-        line = raw_line.strip()
+        line = _strip_illegal_xml_chars(raw_line.strip())
         if not line:
             continue
         if line.startswith("#### "):
