@@ -438,6 +438,84 @@ only once it is actually decided.
 
 ---
 
+## 2026-09-30
+
+**Committed**
+
+- `6f1be68` Fix CSV/XLSX upload extraction rendering blank cells as
+  literal "NaN"
+
+**Worth knowing**
+
+- **Fixed — `extract_text_from_upload()`'s CSV branch (~line 1110-1111)
+  and XLSX branch (~line 1116-1118) both called
+  `pandas.DataFrame.to_string(index=False)` with no `na_rep`, and
+  `to_string()` defaults `na_rep` to the literal string `"NaN"`.** Any
+  blank/missing cell in an uploaded `.csv` or `.xlsx` file (common —
+  incomplete exports, optional columns, sparse spreadsheets) was rendered
+  as the text "NaN" in the extracted document text, which is stored in
+  the project's document repository (and counted in `char_count`) and
+  fed verbatim into every downstream AI call (gap analysis, story
+  generation, doc drafting, glossary, prioritization, change impact) via
+  `truncate()`. Both the AI and any BA reading generated output would see
+  fabricated "NaN" tokens scattered through what should be blank fields —
+  reads as corrupted data, not absence of data. Distinct from the
+  already-fixed `_blank_or_value`/export-builder NaN handling (that
+  covers AI-generated tables round-tripped through the Streamlit editor
+  before *export*); this is a different code path entirely, on the
+  *ingestion* side (upload → extracted text), untouched by that earlier
+  fix. The sibling `to_csv()` calls used for downloads (e.g. `action_df
+  .to_csv(...)`) are unaffected — `to_csv()`'s default `na_rep` is `""`,
+  not `"NaN"` — so only these two `to_string()` call sites needed the
+  fix. Purely mechanical: no UX/product judgment, blank cells now simply
+  stay blank. Verified standalone (outside `py_compile`/dry-run) with a
+  synthetic DataFrame containing blank cells in multiple positions —
+  confirmed "NaN" appeared in the extracted text before the fix and does
+  not after, and that real numeric/string values are byte-for-byte
+  unaffected as a regression check. `py_compile` and
+  `evals/run_evals.py --dry-run` both passed clean before and after.
+- Found by a background review agent given a full, fresh line-by-line
+  read of all 2,754 lines of `synergyai_app.py` (six sequential passes,
+  cross-checked against the current Open items list and recent fixes to
+  avoid re-deriving/re-reporting known items) plus `requirements.txt`.
+  The fix above was the only new, independently-safe finding; everything
+  else it traced (all AI-call helpers and `generate_*`/`analyze_*`/
+  `process_*` functions, every file-parsing path, every export builder,
+  the RTM builder, chat-history trimming, dashboard metrics, project/
+  document CRUD, the full UI flow including the auth gate) matched an
+  already-open item or was too speculative to state as a concrete,
+  reachable bug (e.g. hypothetical IPv6 zone-ID edge cases in the SSRF
+  guard).
+- No new open item raised tonight — the one finding above was fully
+  fixable, not decision-needed.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan (own pass, not delegated). No drift.
+- Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  the repo outside this log's own historical entries.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #59, on
+  `0ad14ab`, last night's log commit): still `failure`, identical
+  `[st.error] AI request failed: Connection error.` symptom on all 7
+  fixtures, same as every run since 2026-08-19. No new evidence gathered
+  tonight — per the standing item's own reasoning, no new guess is
+  warranted without new evidence.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  opened or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11, matching CI) to run `py_compile`, `--dry-run`, and the standalone
+  functional verification above against the real packages, both before
+  and after the fix. (Self-correction: the first venv was accidentally
+  created inside the repo working directory rather than the session
+  scratchpad, tripping the pre-finish untracked-files check; removed it
+  before committing and used the scratchpad for the rest of the session.
+  Nothing from it was ever staged or committed.)
+
+---
+
 ## 2026-09-29
 
 **Committed**
