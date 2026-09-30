@@ -1108,14 +1108,14 @@ def extract_text_from_upload(uploaded_file):
                 except UnicodeDecodeError:
                     raw_text = raw.decode("cp1252", errors="ignore")
             df = pd.read_csv(io.StringIO(raw_text))
-            text = df.to_string(index=False) if len(df.columns) > 0 else ""
+            text = df.to_string(index=False, na_rep="") if len(df.columns) > 0 else ""
         elif ext == "xlsx":
             xls = pd.ExcelFile(uploaded_file)
             parts = []
             for sheet in xls.sheet_names:
                 df = xls.parse(sheet)
                 if len(df.columns) > 0:
-                    parts.append(f"--- Sheet: {sheet} ---\n{df.to_string(index=False)}")
+                    parts.append(f"--- Sheet: {sheet} ---\n{df.to_string(index=False, na_rep='')}")
             text = "\n\n".join(parts)
         else:
             st.error(f"Unsupported file type: .{ext}")
