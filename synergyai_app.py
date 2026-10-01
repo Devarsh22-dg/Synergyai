@@ -1065,13 +1065,13 @@ def extract_text_from_upload(uploaded_file):
     name = uploaded_file.name
     ext = name.split(".")[-1].lower()
     if uploaded_file.size > MAX_UPLOAD_BYTES:
-        st.error(f"This file is larger than {MAX_UPLOAD_BYTES // (1024*1024)}MB — too large to process.")
+        st.error(f'"{name}": larger than {MAX_UPLOAD_BYTES // (1024*1024)}MB — too large to process.')
         return ""
     if ext in _ZIP_BACKED_EXTS:
         try:
             _assert_safe_archive(uploaded_file, ext)
         except ValueError as e:
-            st.error(str(e))
+            st.error(f'"{name}": {e}')
             return ""
     uploaded_file.seek(0)
     try:
@@ -1118,20 +1118,20 @@ def extract_text_from_upload(uploaded_file):
                     parts.append(f"--- Sheet: {sheet} ---\n{df.to_string(index=False, na_rep='')}")
             text = "\n\n".join(parts)
         else:
-            st.error(f"Unsupported file type: .{ext}")
+            st.error(f'"{name}": unsupported file type ".{ext}".')
             return ""
     except ValueError as e:
-        st.error(str(e))
+        st.error(f'"{name}": {e}')
         return ""
     except Exception as e:
-        st.error(f"Couldn't read this file: {e}")
+        st.error(f'"{name}": couldn\'t read this file: {e}')
         return ""
 
     if ext != "pdf" and not text.strip():
         if ext in ("docx", "pptx"):
-            st.warning(f"No extractable text found in this .{ext} file — it may be empty or image-only.")
+            st.warning(f'"{name}": no extractable text found — it may be empty or image-only.')
         else:
-            st.warning(f"No extractable text found in this .{ext} file — it may be empty.")
+            st.warning(f'"{name}": no extractable text found — it may be empty.')
     return text
 
 
