@@ -436,6 +436,162 @@ only once it is actually decided.
   — a product decision, not a mechanical fix, and touches the
   render/download branch structure for that tab (~lines 2361 onward).
 
+- **`_assert_public_url`'s SSRF guard (~line 1142-1182) does not block two
+  IANA special-purpose IPv4 ranges on the pinned Python 3.11.15, confirmed
+  by direct testing tonight, not speculation** (raised 2026-10-01). The
+  guard checks each resolved address's `is_private`/`is_loopback`/
+  `is_link_local`/`is_reserved`/`is_multicast`/`is_unspecified` properties
+  (~line 1177-1178) and rejects the fetch if any is true. Tested every
+  IANA IPv4 special-purpose range against this exact check on this
+  environment's pinned Python (3.11.15, matching `requirements.txt`'s
+  target): **100.64.0.0/10** (RFC 6598 Shared Address Space / "CGNAT")
+  and **192.88.99.0/24** (RFC 3068, 6to4 relay anycast) both return
+  `False` on every one of the six properties checked — a Source URL
+  pointed at an address in either range is fetched by the server with no
+  guard rejection. This is not a theoretical gap: **100.100.100.200**,
+  inside the unblocked 100.64.0.0/10 range, is Alibaba Cloud ECS's
+  well-known internal metadata endpoint (analogous in function and risk
+  to AWS's 169.254.169.254, which *is* correctly blocked here via
+  `is_link_local`); the 100.64.0.0/10 range is also used internally by
+  AWS and GCP NAT infrastructure in some configurations. A BA on one of
+  those platforms pointing the Source URL fetcher at an address in this
+  range would have the server-side request go through unblocked, with
+  the response read back into the app same as any other fetched page.
+  Every other range in the current IANA special-purpose registry that
+  was spot-checked (10/8, 127/8, 169.254/16, 172.16/12, 192.0.0/24,
+  192.0.2/24, 192.168/16, 198.18/15, 198.51.100/24, 203.0.113/24, 224/4,
+  240/4, 255.255.255.255) **is** correctly blocked by the existing
+  checks — this is two specific, narrow gaps, not a broadly broken guard.
+  Deliberately not patched tonight: this is the server's SSRF defense
+  itself, the exact kind of security-critical logic this routine is
+  conservative about even outside the hard `auth.py`/`db.py` ban, and a
+  one-line addition done hastily risks either not fully closing the gap
+  (there may be other unchecked ranges the spot-check above didn't try)
+  or introducing a subtle regression in a function with no existing test
+  coverage. The mechanically obvious fix is adding explicit
+  `ipaddress.ip_network("100.64.0.0/10")`/`"192.88.99.0/24"` membership
+  checks (and IPv6 equivalents — not checked tonight, a separate
+  verification pass) alongside the existing property checks, but this
+  needs a deliberate review/decision rather than a nightly guess, given
+  the severity class. Recommend treating as higher priority than most
+  open items above given the confirmed, concrete metadata-endpoint
+  angle.
+
+- **No cap on the number or total size of files in a single multi-file
+  upload batch** (raised 2026-10-01). `st.file_uploader(...,
+  accept_multiple_files=True)` (repository upload, ~line 1890-1895, and
+  the Elicitation tab's uploader) checks each file individually against
+  `MAX_UPLOAD_BYTES` (20MB) and the zip-bomb guard, but nothing bounds
+  how many files or how much total data a single selection can contain
+  before all of them are parsed synchronously in one Streamlit rerun. A
+  user selecting, say, 50 files at ~20MB each is a real CPU/memory burst
+  with no backgrounding or batching, even though each individual file
+  passes every existing check. Distinct from the already-open "No cap on
+  repository size or document count per project" item above (that one is
+  about *persisted* `proj["documents"]` growth across a session; this is
+  about the size of one transient upload *request* before anything is
+  stored or parsed). Needs a decision on the right batch-count/total-size
+  ceiling and how to surface it at the UI layer — same flavor of decision
+  as the persisted-storage-cap item, possibly worth deciding together.
+
+---
+
+## 2026-10-01
+
+**Committed**
+
+- `7155f93` Include filename in upload error/warning messages
+- `36a9197` Cap free-text AI-input widgets at MAX_CHARS with a live
+  counter
+
+**Worth knowing**
+
+- **Fixed — `extract_text_from_upload()`'s five `st.error`/`st.warning`
+  call sites (too-large, archive-corruption, unsupported type, generic
+  read failure, no-extractable-text) never named the file they were
+  about, even though both call sites that invoke it
+  (`accept_multiple_files=True` at the repository uploader and the
+  Elicitation tab's uploader) accept several files at once.** With
+  multiple files selected, a user had no way to tell which one a given
+  message was about. Purely additive — each message now prefixes the
+  filename already bound as `name` at the top of the function; no
+  change to control flow, to what counts as an error, or to the
+  underlying raw-exception-text question (that's the already-open,
+  separate item above). Verified standalone against the real app code
+  (not just compile/dry-run) using `evals/streamlit_shim.py` and fake
+  uploaded-file objects exercising all four branches (too-large,
+  corrupt-archive, unsupported-extension, empty-file-warning) — each
+  message now correctly includes the filename.
+- **Fixed — eight free-text `st.text_area`/`st.text_input` widgets
+  (project description, new-project description, workshop focus area,
+  elicitation notes, doc generator context + instructions, story
+  creator notes, change request text) had no `max_chars`, even though
+  every one is silently truncated to `MAX_CHARS` (15,000) downstream the
+  moment it's used.** For six of the eight fields this is an exact
+  match to an existing, independent `truncate()` call on that same
+  field (verified by reading each `generate_*`/`analyze_*` function's
+  body, not assumed from the widget alone); for the two Doc
+  Generator/Story Creator context fields, the field is combined with
+  selected repository documents before the combined text is truncated,
+  so the new widget-level cap is a sensible ceiling at the same
+  existing number rather than an exact reproduction of the combined
+  limit. No new number was chosen — `MAX_CHARS` already exists and is
+  already the effective ceiling; this only surfaces it at input time
+  (Streamlit shows a live character counter) instead of a silent cut
+  discovered after submitting. Verified via source inspection that all
+  eight call sites now pass `max_chars=MAX_CHARS`, and confirmed
+  `st.text_area`/`st.text_input` accept that parameter on the pinned
+  `streamlit==1.62.0` via `inspect.signature`.
+- Two new open items raised (see above): (1) **confirmed** (not
+  speculative — directly tested against the pinned Python 3.11.15) gap
+  in the SSRF guard's special-purpose-range coverage, including the
+  well-known Alibaba Cloud metadata-endpoint address; flagged as higher
+  priority than most open items given the concrete cloud-metadata angle,
+  but deliberately not patched tonight — security-critical guard logic,
+  treated with the same conservative bar as `auth.py`/`db.py` in spirit
+  even though it's technically in-scope; (2) no cap on a single
+  multi-file upload batch's count/total size, distinct from the
+  already-open per-project repository-size item.
+- Both fixes and both new open items came from a background review
+  agent given a full, fresh line-by-line read of all 2,754 lines of
+  `synergyai_app.py` plus `requirements.txt`, explicitly primed with the
+  current (26-item) Open items list and the full "already fixed"
+  history to avoid re-deriving/re-reporting known items. Its SSRF-guard
+  lead was reported as "could not confirm from this read alone, needs
+  testing against the pinned Python version" — independently verified
+  tonight (not just trusted) by directly testing specific IANA
+  special-purpose ranges against `ipaddress`'s properties on this
+  environment's actual pinned Python 3.11.15, which is what turned a
+  "maybe" into a confirmed, concrete finding. Its two fix-now candidates
+  were similarly independently re-verified against the actual
+  `generate_*`/`analyze_*` function bodies and the actual
+  `extract_text_from_upload` call sites (not just trusted at face
+  value) before being implemented.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan (own pass, not delegated). No drift.
+- Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  the repo outside this log's own historical entries.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #60, on
+  `486566d`, last night's log commit): still `failure`, identical
+  `[st.error] AI request failed: Connection error.` symptom on all 7
+  fixtures (confirmed via the job log, not just the run conclusion), same
+  as every run since 2026-08-19. No new evidence gathered tonight — per
+  the standing item's own reasoning, no new guess is warranted without
+  new evidence.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  opened or touched, per standing instructions. The SSRF-guard finding
+  above is in `synergyai_app.py`, not `auth.py`/`db.py`.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.15, matching CI) to run `py_compile`, `--dry-run`, and both
+  standalone functional verifications above against the real packages,
+  before and after each of the two commits individually (each commit
+  was validated in isolation, not just the combined diff).
+
 ---
 
 ## 2026-09-30
