@@ -1853,13 +1853,14 @@ def ba_module():
 
         proj["description"] = st.text_area(
             "Project Description / Background", value=proj.get("description", ""), height=120, key=f"desc_{cp}",
+            max_chars=MAX_CHARS,
         )
 
         st.markdown("---")
         st.markdown("#### Create a New Project")
         with st.form(key="new_project_form", clear_on_submit=True):
             new_name = st.text_input("New Project Name")
-            new_desc = st.text_area("Description (optional)", height=80)
+            new_desc = st.text_area("Description (optional)", height=80, max_chars=MAX_CHARS)
             submitted = st.form_submit_button("Create Project")
             if submitted:
                 new_name = new_name.strip()
@@ -2127,6 +2128,7 @@ def ba_module():
                 "What's this workshop about?",
                 placeholder="e.g., Payments workflow requirements for the FinTech migration",
                 key=f"workshop_focus_{cp}",
+                max_chars=MAX_CHARS,
             )
             if st.button("Generate Workshop Prep", key=f"workshop_prep_btn_{cp}"):
                 with st.spinner("Drafting agenda and questions..."):
@@ -2203,7 +2205,7 @@ def ba_module():
                 "e.g., Focus on the payments workflow. The budget ceiling of $1M was confirmed "
                 "by the sponsor on 6/10 — flag anything that conflicts with it."
             ),
-            key=f"elicit_notes_{cp}", height=100,
+            key=f"elicit_notes_{cp}", height=100, max_chars=MAX_CHARS,
         )
         if notes and notes.strip():
             st.caption("These notes will be factored into the analysis.")
@@ -2325,14 +2327,14 @@ def ba_module():
         context_text = st.text_area(
             "Additional source content / notes (combined with the repository documents selected above):",
             value="" if repo_doc_names else proj.get("extracted_text", "")[:2000],
-            height=120, key=f"doc_context_{cp}",
+            height=120, key=f"doc_context_{cp}", max_chars=MAX_CHARS,
         )
         full_context = f"{repo_combined}\n\n{context_text}".strip() if repo_combined else context_text
 
         user_suggestion = st.text_area(
             "Provide specific instructions or focus areas:",
             placeholder="e.g., Ensure the regulatory compliance section is highly detailed.",
-            key=f"doc_suggestion_{cp}",
+            key=f"doc_suggestion_{cp}", max_chars=MAX_CHARS,
         )
 
         if st.button(f"Generate Draft {doc_type}", key=f"generate_doc_btn_{cp}"):
@@ -2458,7 +2460,7 @@ def ba_module():
         notes_text = st.text_area(
             "Additional requirements / notes (combined with the repository documents selected above):",
             value="" if repo_doc_names else proj.get("extracted_text", "")[:2000],
-            height=120, key=f"story_source_{cp}",
+            height=120, key=f"story_source_{cp}", max_chars=MAX_CHARS,
         )
         source_text = f"{repo_combined}\n\n{notes_text}".strip() if repo_combined else notes_text
 
@@ -2586,7 +2588,7 @@ def ba_module():
                 "e.g., Sponsor now wants multi-currency support added to the payments workflow "
                 "before launch, on top of the original single-currency scope."
             ),
-            key=f"change_request_{cp}", height=100,
+            key=f"change_request_{cp}", height=100, max_chars=MAX_CHARS,
         )
 
         if st.button("Analyze Change Impact", key=f"analyze_change_btn_{cp}"):
