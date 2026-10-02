@@ -496,6 +496,60 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-02
+
+**Committed**
+
+Nothing committed tonight (aside from this log entry).
+
+**Worth knowing**
+
+- `synergyai_app.py` had not changed since last night's `36a9197` — gave it
+  another independent full line-by-line read anyway (delegated, primed with
+  the current 29-item Open items list and full fixed-history) rather than
+  skip a second night in a row. It surfaced one candidate: the `Client /
+  Stakeholder` (~line 1845) and `New Project Name` (~line 1862) text inputs
+  still have no `max_chars`, the same gap last night's fix left in two
+  sibling fields in the same section. This is not new, though — the
+  2026-09-29 entry already considered exactly this class of field (Project
+  Name/Client/Stakeholder/Description) and deliberately declined to even
+  open it as a tracked item, reasoning these aren't sent to the AI unbounded
+  the way the tracked fields are and no concrete failure mode surfaced
+  beyond "unbounded in principle." Re-applying that same already-decided
+  reasoning tonight rather than re-litigating it. The same review pass also
+  flagged the "Public webpage URL" field (~line 1955, feeds
+  `_assert_public_url`/`fetch_url_text`) as uncapped; the identical
+  reasoning applies there too (not an AI-prompt field, no concrete failure
+  mode beyond "unbounded in principle"), so it's also left alone rather than
+  added as a new open item.
+- No other new findings from that review; everything else it noticed
+  (case-sensitive name/filename dedup, dashboard counter semantics,
+  filenames missing the project name, stale pre-edit table data reaching the
+  RTM/Change Impact Analyzer, the SSRF guard's CGNAT/6to4 gaps) restates an
+  item already on the Open items list above.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan (own pass, not delegated). No drift.
+- Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  the repo outside this log's own historical entries.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #61, on `18a4ffe`,
+  last night's log commit): still `failure`, identical `[st.error] AI
+  request failed: Connection error.` symptom on all 7 fixtures (confirmed
+  via the job log, not just the run conclusion), same as every run since
+  2026-08-19. No new evidence gathered tonight — per the standing item's
+  own reasoning, no new guess is warranted without new evidence.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.15, matching CI) to run `py_compile` and `--dry-run` against the
+  real packages — both passed clean on the unmodified code.
+
+---
+
 ## 2026-10-01
 
 **Committed**
