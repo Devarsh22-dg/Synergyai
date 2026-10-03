@@ -1746,8 +1746,22 @@ def _recent_chat_messages(history):
     # Drop failed-reply placeholders before windowing: they aren't real
     # assistant turns and shouldn't be resent to the model as if they were.
     usable = [msg for msg in history if not msg.get("is_error")]
+    # Dropping a failed assistant turn can leave two user turns back to back
+    # (e.g. user1, assistant1-error, user2 -> user1, user2 once filtered), and
+    # the API rejects non-alternating roles outright. Merge rather than drop,
+    # so no user content is lost and alternation holds throughout, not just
+    # at the front.
+    merged = []
+    for msg in usable:
+        if merged and merged[-1]["role"] == msg["role"]:
+            merged[-1] = {
+                "role": msg["role"],
+                "content": merged[-1]["content"] + "\n\n" + msg["content"],
+            }
+        else:
+            merged.append({"role": msg["role"], "content": msg["content"]})
     trimmed = []
-    for msg in usable[-MAX_CHAT_MESSAGES_SENT:]:
+    for msg in merged[-MAX_CHAT_MESSAGES_SENT:]:
         content = msg["content"]
         if len(content) > MAX_CHAT_MESSAGE_CHARS:
             content = content[:MAX_CHAT_MESSAGE_CHARS] + "\n\n[...truncated for length...]"
