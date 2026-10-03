@@ -494,6 +494,103 @@ only once it is actually decided.
   ceiling and how to surface it at the UI layer — same flavor of decision
   as the persisted-storage-cap item, possibly worth deciding together.
 
+- **`fetch_url_text`'s content-type filter doesn't cover structured-text
+  types like `application/json`** (raised 2026-10-03). The reject-list at
+  ~line 1219-1224 blocks images/video/audio/fonts and a handful of
+  explicit binary `application/*` types, then falls through to the HTML
+  branch (BeautifulSoup `html.parser`) for everything else. A URL that
+  returns JSON (e.g. a BA pastes an API endpoint instead of a webpage by
+  mistake) isn't caught by that list, so it's parsed as if it were HTML —
+  no crash, but `get_text()` over a JSON body produces garbled,
+  meaningless "extracted text" fed silently into the project's document
+  repository and from there into AI prompts, with no error or warning
+  anywhere. Whether the right fix is rejecting `application/json`
+  (and similar structured types) outright like the other binary types,
+  or something softer, is a small scope call rather than a one-line
+  patch, so left open rather than guessed at.
+
+---
+
+## 2026-10-03
+
+**Committed**
+
+- `207d505` Fix ScopeBot chat history breaking permanently after one failed
+  API call
+
+**Worth knowing**
+
+- **Fixed — `_recent_chat_messages()` (~line 1738-1759) dropped `is_error`
+  assistant placeholders but only trimmed from the *front* of the result,
+  so a failed turn anywhere in the middle of the window left two
+  consecutive `user`-role messages once filtered** (e.g. `user1,
+  assistant1-error, user2` → `user1, user2`). The Anthropic Messages API
+  requires strict user/assistant alternation and rejects that with a 400;
+  `call_chat`'s generic `except Exception` (~line 632) turns that straight
+  into another `is_error` reply, so the orphaned pair never clears —
+  meaning a single transient failure (network blip, rate limit, brief
+  API hiccup) could permanently break every subsequent ScopeBot turn in
+  that session until the bad pair aged out of the 20-message window. Not
+  a product/UX call, just a broken invariant in a self-contained ~20-line
+  helper. Fixed by merging adjacent same-role messages (concatenating
+  content) instead of just filtering, so alternation holds throughout the
+  whole window, not only at its start, and no user content is lost in the
+  process. Verified standalone (beyond `py_compile`/dry-run) against a
+  real venv with the pinned dependencies: reproduced the original bug
+  (two consecutive `user` messages) against the pre-fix code with a
+  synthetic failure-in-the-middle history, confirmed the fix produces
+  strictly alternating roles for that case, a failure-at-the-very-start
+  case, and a double-failure case (with all three users' content verified
+  present in the merged result, nothing silently dropped), and confirmed
+  a normal no-failure history is byte-for-byte unchanged by the fix (the
+  common case must stay untouched).
+- Found by a background review agent given a full, fresh line-by-line
+  read of all 2,756 lines of `synergyai_app.py`, explicitly primed with
+  the current 29-item Open items list and the full fixed-history to avoid
+  re-deriving/re-reporting known items. This was its one high-confidence
+  new finding; independently re-verified against the actual code (not
+  just trusted) before fixing, as above.
+- One new open item raised (see above): `fetch_url_text`'s content-type
+  reject-list doesn't cover `application/json`/structured-text types, so
+  a URL returning JSON silently produces garbled "extracted text" via the
+  HTML fallback path rather than erroring — same review agent's lead,
+  independently confirmed by reading the actual reject-list and fallback
+  branch. Judged a scope call (what to reject, how broadly) rather than a
+  one-line patch, so left open.
+- Also considered and deliberately left unflagged as a new open item: the
+  same review agent noted `_iter_pptx_shapes()`'s group-shape recursion
+  cap (`_depth > 10`, ~line 944-953) silently drops content below that
+  depth with no UI warning — same *class* of silent-truncation gap as
+  several already-tracked items, but the function's own docstring already
+  documents this as a deliberate guard against a pathologically nested
+  file, and ten levels of shape grouping has no plausible real-world BA
+  workflow behind it (unlike, say, the already-tracked 2,000-char
+  carryover truncation, which real documents routinely exceed). Same
+  precedent as the 2026-09-29/2026-10-02 entries declining to track
+  similarly low-signal, no-concrete-failure-mode findings.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan (own pass, not delegated). No drift.
+- Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  the repo outside this log's own historical entries.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #62, on `d664d01`,
+  last night's log commit): still `failure`, identical `[st.error] AI
+  request failed: Connection error.` symptom on all 7 fixtures (confirmed
+  via the job log, not just the run conclusion), same as every run since
+  2026-08-19. No new evidence gathered tonight — per the standing item's
+  own reasoning, no new guess is warranted without new evidence.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11, matching CI) in the session scratchpad (not the repo working
+  directory) to run `py_compile`, `--dry-run`, and the standalone
+  functional verification above against the real packages, both before
+  and after the fix.
+
 ---
 
 ## 2026-10-02
