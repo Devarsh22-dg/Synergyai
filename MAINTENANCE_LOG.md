@@ -509,6 +509,117 @@ only once it is actually decided.
   or something softer, is a small scope call rather than a one-line
   patch, so left open rather than guessed at.
 
+- **User-controlled filenames and fetched-page titles flow unescaped into
+  markdown-rendering Streamlit widgets — a different input channel from
+  the already-open "user-typed free text echoed through markdown" item**
+  (raised 2026-10-04). That earlier item (2026-09-12) covers text a BA
+  *types* into a text area (notes, change-request text) at specific
+  sites. This is a separate channel — filenames the user picks when
+  saving their own files, and `<title>` text scraped from fetched
+  third-party webpages — hitting markdown-rendering widgets at different
+  call sites: `c1.write(doc["name"])` in the Document Repository list
+  (~line 1952); the filename interpolated into several
+  `extract_text_from_upload` `st.error`/`st.warning` messages (~lines
+  1068, 1074, 1121, 1124, 1127, 1132, 1134); `new_name` / batch-upload
+  filenames / `doc_name` (which embeds a fetched page's `<title>`) in
+  `st.success` toasts (~lines 1890, 1943, 1986); and `uploaded_file.name`
+  in an `st.caption` (~lines 2243, 2245). Concrete, not hypothetical:
+  snake_case is a common business-document naming convention (e.g.
+  `Business_Requirements_Draft.docx`), and Markdown treats a matching
+  pair of underscores as emphasis, so `c1.write(...)` renders that
+  filename as "Business*Requirements*Draft.docx" — "Requirements"
+  italicized, underscores silently eaten — instead of the literal name;
+  the same corruption hits any error/warning/success/caption message
+  that quotes the same filename. Same underlying tradeoff as the
+  already-open item: the obvious-looking fix (swap `st.write`/`st.success`
+  for a non-markdown call) either doesn't actually fix it (`st.write`
+  falls through to the same renderer `st.markdown` uses) or changes
+  visual style (`st.text()`), and this spans roughly 11 call sites across
+  a different set of widgets than the 2026-09-12 item — a human should
+  confirm the site list and pick the fix approach (an escaping helper vs.
+  a widget swap) rather than have an automated sweep guess at ~11 sites
+  in one pass.
+
+---
+
+## 2026-10-04
+
+**Committed**
+
+- `5461b1b` Apply FORMATTING_GUIDANCE to generate_test_cases, matching all
+  other generators
+
+**Worth knowing**
+
+- **Fixed — `generate_test_cases()`'s system prompt (~line 1558-1564) was
+  the one `generate_*`/`analyze_*`/`process_*` function out of 11 whose
+  system prompt didn't append the shared `FORMATTING_GUIDANCE` string
+  (confirmed by grep: all other 10 call sites end `) + FORMATTING_GUIDANCE`;
+  this one ended with a bare `)`).** `FORMATTING_GUIDANCE` (defined ~line
+  1405) tells the model that source content carried over from Word
+  documents may use `**bold**` to mark a critical/non-negotiable
+  requirement and `~~strikethrough~~` to mark content that was removed or
+  deprecated (treat as historical, not current). `generate_test_cases`
+  builds its prompt entirely from already-generated story text
+  (`generate_stories`'s output, which *does* get the guidance and itself
+  operates on raw source text that can carry these markers forward), so a
+  story echoing a struck-through (deprecated) requirement or a bolded
+  (non-negotiable) one reached the test-case model with no instruction on
+  what those markers mean — risking a test case asserting behavior for
+  something marked removed, or missing the extra scrutiny the rest of the
+  pipeline gives a non-negotiable requirement. Purely additive, mechanically
+  identical to the pattern at the other 10 sites — no wording of its own
+  invented, no change to control flow or the function's output schema.
+  Verified beyond compile/dry-run: confirmed via `grep` that exactly 11
+  call sites now end in `) + FORMATTING_GUIDANCE` (was 10), diffed the
+  change to confirm it touches only `generate_test_cases`'s system-prompt
+  string and nothing else in the other 10 call sites.
+- One new open item raised (see above): user-controlled filenames/fetched
+  page titles reaching markdown-rendering widgets unescaped at ~11 call
+  sites distinct from the already-open user-typed-free-text item.
+- Also considered and deliberately left unflagged as a new open item: the
+  same review pass surfaced a low-confidence, unverified aside —
+  `extract_docx_with_formatting()`'s embedded-image collection (~line
+  862-863) reads only `doc.part.rels.values()`, the main document part's
+  relationships; if a header/footer part keeps its own separate `.rels`
+  (plausible but not empirically verified tonight), an image embedded
+  only in a header/footer would never be collected at all, not just
+  mis-ordered (distinct from the already-open rels-order item). Not
+  raised as a tracked item since reachability wasn't confirmed and
+  headers/footers rarely carry requirements content in this app's actual
+  use case — noting it here in case it's worth a quick empirical check
+  sometime, same precedent as prior nights declining to track
+  low-signal/unconfirmed findings.
+- Both the fix and both new findings above came from a background review
+  agent given a full, fresh line-by-line read of all 2,770 lines of
+  `synergyai_app.py` plus `requirements.txt`, explicitly primed with the
+  current (33-item) Open items list and the full fixed-history to avoid
+  re-deriving/re-reporting known items. Its fix-now candidate and both
+  findings were independently re-verified against the actual code tonight
+  (not just trusted) before acting, as detailed above.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan (own pass, not delegated). No drift.
+- Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  the repo outside this log's own historical entries.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #63, on
+  `f17524c`, last night's log commit): still `failure`, identical
+  `[st.error] AI request failed: Connection error.` symptom on all 7
+  fixtures (confirmed via the job log, not just the run conclusion), same
+  as every run since 2026-08-19. No new evidence gathered tonight — per
+  the standing item's own reasoning, no new guess is warranted without
+  new evidence.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11, matching CI) in the session scratchpad (not the repo working
+  directory) to run `py_compile` and `evals/run_evals.py --dry-run`
+  against the real pinned packages — both passed clean after the fix.
+
 ---
 
 ## 2026-10-03
