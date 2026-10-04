@@ -1561,7 +1561,7 @@ def generate_test_cases(stories):
         "its acceptance criteria — cover the happy path and, where the acceptance criteria imply "
         "one, at least one edge case. Only test what the acceptance criteria actually specify; "
         "don't invent behavior."
-    )
+    ) + FORMATTING_GUIDANCE
     user_prompt = f"User stories and acceptance criteria to derive test cases from:\n\n{source_text}"
     result = call_structured(
         system, user_prompt, "submit_test_cases",
