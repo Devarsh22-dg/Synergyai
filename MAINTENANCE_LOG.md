@@ -542,6 +542,93 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-05
+
+**Committed**
+
+- `cc08fc1` Fix build_visio_dataviz_xlsx crashing on illegal XML control chars
+
+**Worth knowing**
+
+- **Fixed — `build_visio_dataviz_xlsx()` (~line 1369-1400) never sanitized
+  cell values, unlike its two sibling export builders, and would crash the
+  whole Streamlit run with `openpyxl.utils.exceptions.IllegalCharacterError`
+  the moment a control character reached it.** `build_xlsx_from_df`
+  (~line 1303-1317) and `build_docx_table_from_df` (~line 1320-1334) both
+  route every cell through `_blank_or_value()` → `_strip_illegal_xml_chars()`
+  before writing it — the fix already applied repo-wide on 2026-09-29 for
+  exactly this character class (`\x00-\x08`, `\x0B-\x0C`, `\x0E-\x1F`).
+  `build_visio_dataviz_xlsx`, added separately, wrote `r.get("process_step",
+  "")` and `r.get("shape_type", "Process")` straight into `ws.append([...])`
+  with no sanitization at any of its four non-literal fields. It's called
+  inline as a `st.download_button` argument (~line 2441, "Download Visio
+  Process Map (.xlsx)") with no try/except, using `saved["rows"]` — the raw
+  output of `generate_asis_tobe()` (~line 1492), stored unmodified and read
+  back at the download-button call site. `_strip_illegal_xml_chars`'s own
+  docstring already names "a stray pypdf extraction artifact, or AI output
+  echoing source text verbatim" as a real source for exactly this character
+  class, so a BA generating an As-Is/To-Be document from a PDF-derived
+  source, then clicking the Visio download button, could hit this crash
+  under ordinary use. Fixed by wrapping all four fields in `_blank_or_value()`,
+  the identical mechanical pattern used two functions above it — no new
+  logic invented, no change to the function's output shape. Verified beyond
+  compile/dry-run: reproduced the original `IllegalCharacterError` standalone
+  against the pre-fix code with a synthetic row containing a stray `\x0b`
+  character, confirmed the fix produces a valid workbook with the control
+  character stripped, and confirmed a normal (no-control-character) row
+  produces byte-for-byte identical output before and after the fix.
+- Found by a background review agent given a full, fresh line-by-line read
+  of all 2,770 lines of `synergyai_app.py`, explicitly primed with the
+  current 31-item Open items list and the full fixed-history to avoid
+  re-deriving/re-reporting known items, and instructed to verify any lead
+  against the actual pinned library source rather than guess (it downloaded
+  and read openpyxl 3.1.5's own `IllegalCharacterError`-raising regex to
+  confirm the character class matched before reporting). Independently
+  re-verified tonight before fixing: read the function and its call site
+  directly, confirmed `rows` traces to `generate_asis_tobe`'s raw AI output
+  with no sanitization in between, and reproduced + fixed + regression-
+  checked as described above.
+- No new open item raised tonight — the one new finding was fully fixable,
+  not decision-needed. The review agent's other lead (three text inputs —
+  "Client / Stakeholder" line 1859, "New Project Name" line 1876, "Public
+  webpage URL" line 1970 — still lacking `max_chars`) is **not new**: it's
+  the identical gap already explicitly reviewed and deliberately left
+  untracked twice before (2026-09-29 and 2026-10-02 entries below, same
+  three fields, same reasoning — not sent to the AI unbounded, no concrete
+  failure mode beyond "unbounded in principle"). Re-applying that
+  already-decided reasoning rather than re-raising it or re-litigating it.
+- Also checked and ruled out by the same review agent, worth recording so
+  it isn't re-chased: a hypothesis that removing a document from the repo
+  while it's still selected in one of the four per-project `st.multiselect`
+  document pickers would crash with `StreamlitAPIException` on the next
+  rerun (a persisted widget value referencing a now-missing option). Not a
+  bug — Streamlit 1.62.0's actual source
+  (`options_selector_utils.validate_and_sync_multiselect_value_with_options`)
+  silently filters stale values rather than raising.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan (own pass, not delegated). No drift.
+- Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  the repo outside this log's own historical entries.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report.
+- Checked the Nightly Evals GitHub Action directly (run #64, on `b1384ac`,
+  last night's log commit): still `failure`, identical `[st.error] AI
+  request failed: Connection error.` symptom, same as every run since
+  2026-08-19. No new evidence gathered tonight — per the standing item's
+  own reasoning, no new guess is warranted without new evidence.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or touched, per standing instructions.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11, matching CI) in the session scratchpad (not the repo working
+  directory) to run `py_compile`, `--dry-run`, and the standalone
+  functional verification above against the real packages, both before
+  and after the fix.
+
+---
+
 ## 2026-10-04
 
 **Committed**
