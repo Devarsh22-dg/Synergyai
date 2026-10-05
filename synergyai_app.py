@@ -1381,11 +1381,11 @@ def build_visio_dataviz_xlsx(rows):
         cell.fill = PatternFill(start_color="1F2333", end_color="1F2333", fill_type="solid")
     for r in rows:
         ws.append([
-            str(r.get("step_id", "")),
-            r.get("process_step", ""),
-            str(r.get("next_step_id", "")),
+            _blank_or_value(str(r.get("step_id", ""))),
+            _blank_or_value(r.get("process_step", "")),
+            _blank_or_value(str(r.get("next_step_id", ""))),
             "",
-            r.get("shape_type", "Process"),
+            _blank_or_value(r.get("shape_type", "Process")),
         ])
     # Force the ID columns to explicit text format — otherwise Excel may auto-interpret
     # values like "010" as the number 10, which would break step matching on import.
