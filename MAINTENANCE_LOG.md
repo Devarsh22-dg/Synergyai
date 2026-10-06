@@ -540,6 +540,93 @@ only once it is actually decided.
   a widget swap) rather than have an automated sweep guess at ~11 sites
   in one pass.
 
+- **CSV uploads have the same unguarded binary-content fallback as the
+  already-open `.txt` item, at a separate call site** (raised
+  2026-10-06). `extract_text_from_upload`'s `.csv` branch (~line
+  1099-1111) uses the identical BOM-detection + `cp1252(errors="ignore")`
+  fallback already tracked for the `.txt` branch (2026-09-07), but that
+  item's wording only names `.txt`. Somewhat lower-confidence/lower-
+  frequency than the `.txt` case since the decoded text is then run
+  through `pd.read_csv`, which is more likely (not guaranteed) to raise a
+  caught parser error on genuinely binary content — but the risk is real.
+  Worth deciding together with the `.txt` item rather than separately,
+  same precedent as other same-issue-different-call-site entries above.
+
+- **ScopeBot's chat context note silently truncates the project
+  description to 500 chars with no notice** (raised 2026-10-06).
+  `chat_with_bot` (~line 1781) sends `proj['description'][:500]` as
+  background context with no caption, unlike every other truncation
+  point in the file. Low practical impact — this is invisible context
+  never shown to the user to edit, and ScopeBot's framing is coarse-
+  grained anyway — so this may be a defensible intentional exception
+  rather than an oversight; left for a decision rather than assumed.
+
+- **The Project Manager placeholder module's "Select Project to View"
+  dropdown does nothing** (raised 2026-10-06). `pm_module` (~line 2668)
+  renders a dropdown whose selected value is never read or used
+  anywhere. Low priority since the whole module is explicitly documented
+  as an unbuilt placeholder, but it currently looks functional to a user
+  while silently doing nothing — worth a decision on whether to remove
+  it until the module is real, rather than leave a dead control in a
+  shipped UI.
+
+---
+
+## 2026-10-06
+
+**Committed**
+
+Nothing committed tonight.
+
+**Worth knowing**
+
+- No code change made. A background review agent gave `synergyai_app.py`
+  and `requirements.txt` a full, fresh line-by-line read (primed with the
+  current 34-item Open items list and the 2026-10-01 through 2026-10-05
+  fix history to avoid re-deriving/re-reporting known items). It reported
+  **zero fix-now candidates** — every lead it chased either duplicated an
+  already-open item or, on independent verification against the actual
+  call sites (e.g. `build_docx_table_from_df`'s/`build_xlsx_from_df`'s
+  `title`/`sheet_name` params not being run through
+  `_strip_illegal_xml_chars`), turned out not to be reachable with real
+  content today (all call sites pass hardcoded literal strings, never AI
+  or user content), so reporting them would have been gold-plating a
+  theoretical gap rather than fixing a real bug. Given how many prior
+  nights have already run the same kind of full-file pass, a clean pass
+  is treated as a plausible genuine result, not a sign of under-searching.
+- Three new open items raised (see above): CSV uploads sharing the
+  already-tracked `.txt` binary-content gap at a separate call site; an
+  uncaptioned 500-char truncation of the project description sent as
+  ScopeBot's background chat context; and a dead "Select Project to
+  View" dropdown in the still-unbuilt PM placeholder module. All three
+  are judgment calls or affect an already-flagged class of issue, not
+  one-line mechanical fixes.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` (own pass, cross-
+  checked against the review agent's independent scan). No drift — every
+  pin has a matching import and vice versa.
+- Checked the Nightly Evals GitHub Action directly (run #65, on
+  `e17afd1`, last night's log commit): still `failure`, identical
+  `[st.error] AI request failed: Connection error.` symptom on all 7
+  fixtures (confirmed via the actual job log, not just the run
+  conclusion), same as every run since 2026-08-19. No new evidence
+  gathered tonight — per the standing item's own reasoning, no new guess
+  is warranted without new evidence.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report, for the same reason as above
+  (the Action's "Commit results" step is skipped whenever the harness
+  step fails).
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  opened or analyzed in depth, per standing instructions; the review
+  agent only grepped the two files for their third-party imports.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11, matching CI) in the session scratchpad (not the repo working
+  directory) to run `py_compile` and `evals/run_evals.py --dry-run`
+  against the real pinned packages — both passed clean on the unmodified
+  code.
+
 ---
 
 ## 2026-10-05
