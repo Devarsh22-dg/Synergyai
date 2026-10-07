@@ -570,6 +570,119 @@ only once it is actually decided.
   it until the module is real, rather than leave a dead control in a
   shipped UI.
 
+- **Two more call sites of the already-open "failed AI regeneration
+  redisplays the previous successful result with no staleness
+  indication" item** (raised 2026-10-07, extending the 2026-09-28 item).
+  That item enumerates 7 panels following the `result = proj.get(x); if
+  result: <render as fresh>` pattern with no indication the rendered
+  result predates a just-failed regeneration click. Verified two more
+  panels follow the identical pattern, not in that enumeration: Workshop
+  Prep (`synergyai_app.py` ~line 2147-2186, `proj["workshop_prep"]`) and
+  Prioritization (~line 2284-2316, `proj["prioritization"]`). Same fix
+  shape as the original item, so should be decided together with it
+  rather than in isolation.
+
+- **Several `generate_*`/`analyze_*` panels show no success confirmation
+  at all when a generation succeeds, unlike Meeting Intelligence, Gap
+  Analysis, and the Documentation Generator, which all show an explicit
+  `st.success(...)`** (raised 2026-10-07). Verified by reading each
+  panel's render block: Stories (~line 2487-2495), Test Cases (~line
+  2519-2521), Business Glossary (~line 2044-2046), Prioritization
+  (~line 2284-2296), and Workshop Prep (~line 2147-2158) populate and
+  render their tables/content with no success banner — the only signal
+  of completion is the table/content appearing. Distinct from the
+  already-open "six `generate_*` functions give no UI feedback on a
+  valid empty result" item (2026-08-30): that one is about the
+  empty-vs-failure ambiguity specifically; this is about the absence of
+  positive confirmation on an ordinary successful non-empty result.
+  Low severity — the content itself is visible proof of success — so
+  flagging as a minor copy/UX consistency gap rather than fixing; the
+  right wording/placement is a small judgment call best bundled with
+  any future pass on the related stale-result item above, since both
+  touch the same panels.
+
+- **The "Client / Stakeholder" project field is captured but never
+  surfaced or used anywhere** (raised 2026-10-07). `proj["client"]` is
+  set once, at the `st.text_input` on `synergyai_app.py` line 1859
+  (default `""` from `default_project()` line 506), and confirmed via
+  grep to have no other read site in the whole file — not shown on the
+  dashboard, not in any generated document, not sent to any AI prompt.
+  Not a bug, just an apparently-incomplete feature noticed during a
+  routine read-through — worth a decision on whether to surface it
+  somewhere (dashboard, document headers) or drop the field, rather than
+  leave a dead input in a shipped UI.
+
+---
+
+## 2026-10-07
+
+**Committed**
+
+Nothing committed tonight.
+
+**Worth knowing**
+
+- No code change made. A background review agent gave `synergyai_app.py`
+  and `requirements.txt` a full, fresh line-by-line read, primed with the
+  current 37-item Open items list (but not the full dated history further
+  down this file). It surfaced two candidates it framed as "fix-now":
+  adding `max_chars` to the "Client / Stakeholder" (line 1859) and "New
+  Project Name" (line 1876) text inputs. On cross-checking against this
+  file's own history (read directly tonight, not delegated), this is
+  **not new** — it is the identical finding already explicitly reviewed
+  and deliberately declined twice before (2026-09-29 and 2026-10-02
+  entries below, re-affirmed again 2026-10-05), same two fields plus
+  "Public webpage URL", same reasoning: neither field is sent to the AI
+  unbounded, and no concrete failure mode exists beyond "unbounded in
+  principle." Re-applying that same already-decided reasoning a fourth
+  time rather than overriding three consecutive nights of considered
+  judgment on the strength of a sub-agent that lacked that history —
+  verified the line numbers and field behavior directly against today's
+  code before declining, rather than taking either the agent's framing
+  or the prior reasoning on faith.
+- Three new open items raised (see above): two more call sites (Workshop
+  Prep, Prioritization) of the already-open stale-result-on-failure
+  item; several `generate_*` panels missing a success banner on a
+  successful non-empty result; and the "Client / Stakeholder" field
+  being captured but never read anywhere. All verified directly against
+  the current code (not just trusted from the review agent) before being
+  logged.
+- Also checked and ruled out by the same review agent, independently
+  re-confirmed tonight: `build_xlsx_from_df`'s `sheet_name` and
+  `build_docx_table_from_df`'s `title` parameters are always hardcoded
+  literal strings at every call site (not AI/user content), so the
+  missing `_strip_illegal_xml_chars` sanitization on those two params —
+  present on the sibling `build_docx_from_markdown`'s title — is not
+  reachable with real content today. Same conclusion the 2026-10-06
+  review independently reached for a related pair of params; not
+  re-flagged.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` via a direct grep-level pass (own pass,
+  cross-checked against the review agent's independent scan, not solely
+  delegated). No drift — every third-party import has a matching pin
+  and vice versa; `streamlit-authenticator` is pinned with no import in
+  `synergyai_app.py` itself, expected since it backs the off-limits
+  `auth.py`.
+- Checked the Nightly Evals GitHub Action directly (run #66, on
+  `d51ea62`, last night's log commit): still `failure`, identical
+  `[st.error] AI request failed: Connection error.` symptom on all 7
+  fixtures (confirmed via the actual job log, not just the run
+  conclusion), same as every run since 2026-08-19. No new evidence
+  gathered tonight — per the standing item's own reasoning, no new guess
+  is warranted without new evidence.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report, for the same reason as above.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  opened or analyzed, per standing instructions; the review agent was
+  explicitly instructed not to open them either and confirmed it didn't.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11, matching CI) in the session scratchpad (not the repo working
+  directory) to run `py_compile` and `evals/run_evals.py --dry-run`
+  against the real pinned packages — both passed clean on the unmodified
+  code.
+
 ---
 
 ## 2026-10-06
