@@ -612,6 +612,90 @@ only once it is actually decided.
   somewhere (dashboard, document headers) or drop the field, rather than
   leave a dead input in a shipped UI.
 
+- **The "Create a New Project" form silently discards the Description
+  field on a validation failure** (raised 2026-10-08). The form at
+  `synergyai_app.py` line 1875 is `st.form(key="new_project_form",
+  clear_on_submit=True)`. Streamlit's `clear_on_submit=True` resets every
+  widget inside the form to its default on *every* submission, regardless
+  of what the handler does — including the two validation-failure
+  branches at lines 1882/1884 (`st.warning("Give the project a name.")`
+  and `st.warning("A project with this name already exists.")`). A BA who
+  types a project name, writes a paragraph of description, and submits
+  with a name that's empty or already taken loses the description text
+  with no indication anything was cleared — only the warning banner shows,
+  not what disappeared. Verified directly against the code (lines
+  1875-1891), not just taken on a review agent's word. The mechanically
+  obvious-looking fix (`clear_on_submit=False` plus an explicit clear only
+  on the success path, ~line 1888-1891) is a real UX call, not a one-line
+  patch — e.g. whether the name field should also survive a failed
+  submission, and whether `clear_on_submit=False` has any other visible
+  effect on this specific form — so left for a decision rather than
+  guessed at.
+
+---
+
+## 2026-10-08
+
+**Committed**
+
+Nothing committed tonight.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` and `requirements.txt` have not
+  changed since `cc08fc1` (2026-10-05) and had three consecutive full
+  fresh line-by-line reviews since then (10-05, 10-06, 10-07) with
+  nothing new found beyond what's already tracked — so a clean-to-near-
+  clean pass was expected tonight, and that's what happened.
+- One new open item raised (see above): the new-project form's
+  `clear_on_submit=True` silently discarding the Description field on a
+  validation failure. Found by a background review agent given a full
+  fresh read of all 2771 lines of `synergyai_app.py`, explicitly primed
+  with the current 38-item Open items list to avoid re-deriving/
+  re-reporting known items; independently re-verified directly against
+  the actual form code (lines 1875-1891) before logging, not taken on the
+  agent's word alone.
+- The same review agent's one "fix-now" candidate — wrapping
+  `build_docx_table_from_df`'s `title` parameter (line 1322) in
+  `_strip_illegal_xml_chars()`, matching its sibling
+  `build_docx_from_markdown` — was **not applied**. This is the identical
+  gap already checked and ruled out on 2026-10-06 and reaffirmed
+  2026-10-07: all 4 call sites (lines 2066, 2413, 2436, 2589) pass only
+  hardcoded literal strings, never AI or user content, so it's not
+  reachable with real content today. The agent itself flagged this and
+  classified it as zero-impact/consistency-only; applying it anyway would
+  be gold-plating a theoretical gap the routine has already twice decided
+  isn't a real bug. Not re-logged as a new open item since it was never
+  an open item to begin with — it was explicitly dismissed as not a bug.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan (own pass, not delegated): every import maps to a pin
+  and vice versa, no drift. `theme` (imported by both `synergyai_app.py`
+  and `auth.py`) is a local module, not a third-party dependency.
+- Confirmed no stale references to the deleted `otp_email.py` anywhere in
+  the repo outside this log's own historical entries.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report, for the same reason as every
+  prior night (the Nightly Evals Action's "Commit results" step is
+  skipped whenever the harness step fails, and it has failed every night
+  since 2026-08-19 per the standing open item above).
+- Checked the Nightly Evals GitHub Action directly (run #67, on `2c2a4ed`,
+  last night's log commit): still `failure`, same symptom class as every
+  run since 2026-08-19 per the standing open item. No new evidence
+  gathered tonight — per that item's own reasoning, no new guess is
+  warranted without new evidence, so the job log wasn't re-pulled again
+  tonight beyond confirming the run's conclusion.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed, per standing instructions; the review agent was explicitly
+  instructed not to open them either and confirmed it didn't.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11, matching CI) in the session scratchpad (not the repo working
+  directory) to run `py_compile` and `evals/run_evals.py --dry-run`
+  against the real pinned packages — both passed clean on the unmodified
+  code.
+
 ---
 
 ## 2026-10-07
