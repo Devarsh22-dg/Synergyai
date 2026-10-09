@@ -632,6 +632,96 @@ only once it is actually decided.
   effect on this specific form — so left for a decision rather than
   guessed at.
 
+- **`.docx` header/footer content and `.pptx` slide-master/layout content
+  are never read at all — not merely mis-ordered, entirely absent**
+  (raised 2026-10-09; confirms and upgrades a 2026-10-04 aside that was
+  deliberately left unverified/untracked at the time).
+  `extract_docx_with_formatting()` (~line 800-802) walks
+  `doc.iter_inner_content()`, which is python-docx's
+  main-body-only iterator (paragraphs and tables in document order); it
+  never visits a header or footer part, each of which keeps its own
+  separate paragraphs/relationships. Its embedded-image collection
+  (~line 861-863) only reads `doc.part.rels.values()` — the main document
+  part's relationships — so an image embedded only in a header or footer
+  (e.g. a company logo, or a diagram placed in a template's standing
+  header) is never collected, not just mis-ordered relative to body
+  images (distinct from the already-open rels-order item above).
+  `extract_pptx_with_formatting()` (~line 967-971) iterates only
+  `prs.slides`; `prs.slide_masters` and `prs.slide_layouts` are never
+  touched, so text or images placed on a slide master/layout (common for
+  template boilerplate, a standing diagram, or a company footer applied
+  to every slide) are likewise silently invisible to every downstream AI
+  call — no error, no warning, just absent from what the AI sees.
+  Confirmed directly tonight by reading both functions end to end: these
+  are the only iteration points in either extractor. Whether this is
+  worth the added parsing complexity, given how rarely a BA's actual
+  *requirements* content (as opposed to boilerplate/branding) lives in a
+  header, footer, master, or layout rather than the main body/slide area,
+  is a product call, not a mechanical fix — left for a decision rather
+  than guessed at.
+
+---
+
+## 2026-10-09
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` and `requirements.txt` have not
+  changed since `cc08fc1` (2026-10-05) and had four consecutive full
+  line-by-line reviews since then (10-05 fix night, 10-06/10-07/10-08
+  clean-ish) with nothing new found beyond what's tracked — tonight's
+  fifth review, by a background agent given a full fresh read primed with
+  the current 38-item Open items list and explicit instructions not to
+  re-raise any of them, came back with zero fix-now candidates and one
+  genuinely new item (above), independently re-verified line-by-line
+  against the actual code tonight before logging (confirmed
+  `iter_inner_content()` is main-body-only, confirmed `doc.part.rels` and
+  `prs.slides` are each extractor's only iteration point via direct
+  reading, not grep alone).
+- Also surfaced by the same review, considered, and deliberately left
+  untracked (not even as a new open item): (1) `fetch_url_text`'s
+  redirect loop (~line 1195, `for _ in range(MAX_FETCH_REDIRECTS + 1)`)
+  allows one extra hop beyond the stated 5-redirect limit — a genuine
+  off-by-one, confirmed by reading the code, but it makes the guard
+  *more* permissive by exactly one hop with no security or correctness
+  consequence, so logging it as a tracked item would be gold-plating; (2)
+  the PDF-decryption truthiness check (`reader.decrypt("")`, ~line 896)
+  was re-confirmed correct as-is against pypdf's actual `PasswordType`
+  enum semantics, not a bug; (3) `add_doc_to_repo` moving an overwritten
+  document to the end of the list (~line 547-557) is a cosmetic ordering
+  change on re-upload, not incorrect behavior. None of these meet the bar
+  for the Open items list.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` via a fresh
+  AST-level scan (own pass, not delegated, run directly tonight). No
+  drift — every import maps to a pin and vice versa; `theme` is a local
+  module, not a third-party dependency.
+- Checked the Nightly Evals GitHub Action directly (run #68, on
+  `753a4e8`, last night's log commit): still `failure`, same symptom
+  class as every run since 2026-08-19 per the standing open item above.
+  No new evidence gathered tonight — per that item's own reasoning, no
+  new guess is warranted without new evidence, so the job log wasn't
+  re-pulled beyond confirming the run's conclusion.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report, for the same reason as every
+  prior night (the Action's "Commit results" step is skipped whenever the
+  harness step fails).
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed, per standing instructions; the review agent was explicitly
+  instructed not to open `auth.py`/`db.py` either and confirmed it
+  didn't.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11, matching CI) in the session scratchpad (not the repo working
+  directory) to run `py_compile` and `evals/run_evals.py --dry-run`
+  against the real pinned packages — both passed clean on the unmodified
+  code.
+
 ---
 
 ## 2026-10-08
