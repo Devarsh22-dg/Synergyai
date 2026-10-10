@@ -662,6 +662,63 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-10
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` and `requirements.txt` have not
+  changed since `cc08fc1` (2026-10-05) and had five consecutive full
+  line-by-line reviews since then (10-05 fix night, 10-06 through 10-09
+  clean) with nothing new found beyond what's tracked — tonight's sixth
+  review, by a background agent given a full fresh read of all 2,770 lines
+  in ~400-line chunks, explicitly primed with the current 38-item Open
+  items list and instructed not to re-raise any of them, came back with
+  **zero** new fix-now or decision-needed candidates. It chased two
+  promising-looking leads (docx/pptx single-embedded-image decompression
+  headroom inside the already-bounded ~200MB archive guard; IPv6
+  special-purpose ranges in `_assert_public_url`'s SSRF guard, extending
+  the open 2026-10-01 IPv4 finding) and, on verification, found both were
+  already covered: the first is the identical residual risk the team
+  explicitly accepted on 2026-09-03 (`f45beb0`) and re-confirmed
+  2026-09-23/24; the second tested every IANA IPv6 special-purpose range
+  against the guard on Python 3.11.17 and found a handful of carve-outs
+  within `2001::/23` (PCP anycast, AMT, AS112-v6, ORCHIDv2, Drone Remote
+  ID) pass unblocked, but none are bound to any known cloud-internal/
+  metadata service — genuinely public protocol space, not a metadata-
+  endpoint-class gap like the tracked IPv4 100.64.0.0/10 case — so not
+  logged as a new item.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py`, `auth.py`, and `db.py` directly tonight
+  (own pass, not delegated): every import maps to a pin and vice versa,
+  no drift.
+- Checked the Nightly Evals GitHub Action directly (run #69, on
+  `36a0231`, last night's log commit): still `failure`, identical
+  `[st.error] AI request failed: Connection error.` symptom on all 7
+  fixtures (confirmed via the actual job log, not just the run
+  conclusion), same as every run since 2026-08-19. No new evidence
+  gathered tonight — per the standing open item's own reasoning, no new
+  guess is warranted without new evidence.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report, for the same reason as every
+  prior night (the Action's "Commit results" step is skipped whenever the
+  harness step fails).
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed, per standing instructions; the review agent was explicitly
+  instructed not to open `auth.py`/`db.py` either and confirmed it
+  didn't.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.17) in the session scratchpad (not the repo working directory) to
+  run `py_compile` and `evals/run_evals.py --dry-run` against the real
+  pinned packages — both passed clean on the unmodified code.
+
+---
+
 ## 2026-10-09
 
 **Committed**
