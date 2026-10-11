@@ -662,6 +662,76 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-11
+
+**Committed**
+
+- `c908620` Fix generate_test_cases silently dropping a story field whose value is 0 or False
+
+**Worth knowing**
+
+- **Fixed — `generate_test_cases` (~line 1541-1554) wrapped `_blank_or_value(...)`
+  in `... or ''`, reintroducing exactly the NaN-vs-real-value bug
+  `_blank_or_value` exists to prevent.** `_blank_or_value` already returns `""`
+  for a blank/NaN cell and the real value otherwise (its documented purpose,
+  per the comment directly above this call site). But `_blank_or_value(0) or
+  ''` evaluates to `''` because `0` is falsy in Python, not just NaN/None —
+  same for `False`. A BA who edits a story's "Requirement" cell (via the
+  Story table's `st.data_editor`) to a bare `0` would have that cell silently
+  erased from the prompt sent to the AI when generating test cases, with no
+  indication anything was dropped; `False` would hit the same path. Fix:
+  dropped the redundant `or ''` on all three fields (requirement, user_story,
+  acceptance_criteria) — f-string interpolation already stringifies
+  `_blank_or_value`'s return value correctly (`0` → `"0"`, `""`/`None`/NaN →
+  `""`), so no other change was needed. Verified directly: read
+  `_blank_or_value`'s definition (line 1287) to confirm it returns the literal
+  int/bool unchanged for non-NaN scalars; grepped for every other
+  `_blank_or_value(...)` call site (lines 1312, 1331, 1384-1388) and confirmed
+  this `... or ''` wrapper pattern was unique to this one call site, so the
+  fix is narrowly scoped; sanity-checked the exact f-string output for
+  `0`, `False`, `""`, `None`, and `nan` inputs in an isolated interpreter
+  before and after the change. Found by a background review agent given a
+  full fresh read of all 2770 lines, primed with the current 39-item Open
+  items list and instructed not to re-raise any of them; the same agent also
+  investigated whether python-pptx's table-cell merging duplicates text the
+  way python-docx's does (which would have been a new `.pptx` instance of the
+  already-open docx-vertical-merge item) by actually running python-pptx
+  merge code and inspecting object identity — confirmed pptx returns distinct
+  `_Cell` objects with empty `.text` for spanned cells, unlike docx, so this
+  is **not** a bug and wasn't logged.
+- `synergyai_app.py` had not changed since `cc08fc1` (2026-10-05) and had six
+  consecutive clean/near-clean full-file reviews since then — tonight's
+  seventh review is the first in that streak to surface an actual fix-now
+  bug rather than a decision-needed item or nothing.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` via a direct AST scan (own pass, not
+  delegated — parsed the file's import statements and diffed against the
+  stdlib and the requirements pins). No drift: every import (`PIL`,
+  `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`, `pypdf`,
+  `requests`, `streamlit`) maps to a pin and vice versa.
+- Checked the Nightly Evals GitHub Action directly (run #70, on `323db2f`,
+  last night's log commit): still `failure` — same job shape as every run
+  since 2026-08-19 (`Run eval harness` step fails, `Commit results` step
+  skipped as a result). Did not re-pull the full job log text tonight since
+  the symptom class and root-cause reasoning are already established by
+  prior nights' investigations and the standing open item explicitly says no
+  new guess is warranted without new evidence.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report, for the same reason as every prior
+  night (the Action's "Commit results" step is skipped whenever the harness
+  step fails).
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened or
+  analyzed, per standing instructions; the review agent was explicitly
+  instructed not to open `auth.py`/`db.py` either and confirmed it didn't.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.17) in the session scratchpad (not the repo working directory) to run
+  `py_compile` and `evals/run_evals.py --dry-run` against the real pinned
+  packages — both passed clean both before and after tonight's fix.
+
+---
+
 ## 2026-10-10
 
 **Committed**
