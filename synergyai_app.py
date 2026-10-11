@@ -1548,9 +1548,9 @@ def generate_test_cases(stories):
         # model as if it were real requirement text. _blank_or_value already exists
         # for this exact NaN-vs-real-value distinction (used for table exports).
         story_lines.append(
-            f"Requirement: {_blank_or_value(s.get('requirement')) or ''}\n"
-            f"User Story: {_blank_or_value(s.get('user_story')) or ''}\n"
-            f"Acceptance Criteria: {_blank_or_value(s.get('acceptance_criteria')) or ''}"
+            f"Requirement: {_blank_or_value(s.get('requirement'))}\n"
+            f"User Story: {_blank_or_value(s.get('user_story'))}\n"
+            f"Acceptance Criteria: {_blank_or_value(s.get('acceptance_criteria'))}"
         )
     source_text, was_truncated = truncate("\n\n".join(story_lines))
     if was_truncated:
