@@ -662,6 +662,46 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-12
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. Read `synergyai_app.py` end to end myself tonight
+  (not delegated to a subagent), cross-referencing every finding against
+  the 39-item Open items list above before considering it, plus
+  `theme.py` (small, imported by the main app, not security-critical) and
+  `requirements.txt`. Nothing new surfaced beyond what's already tracked —
+  `synergyai_app.py` hasn't changed since last night's `c908620` fix, so a
+  clean read was the likely outcome.
+- Re-verified `requirements.txt` against every third-party import in
+  `synergyai_app.py` directly (grepped every `import`/`from` line, matched
+  each against a pin): no drift.
+- Checked the Nightly Evals GitHub Action directly (run #71, on `30a6e58`,
+  last night's log commit): still `failure`, same symptom class as every
+  run since 2026-08-19. No new evidence gathered tonight — per the
+  standing open item's own reasoning, no new guess is warranted without
+  new evidence.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report, for the same reason as every
+  prior night (the Action's "Commit results" step is skipped whenever the
+  harness step fails).
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed tonight, per standing instructions. Confirmed (again) via
+  grep that no stale reference to the deleted `otp_email.py` exists
+  anywhere outside this log's own history.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11, in `/tmp`, not the repo working directory) to run `py_compile` and
+  `evals/run_evals.py --dry-run` against the real pinned packages — both
+  passed clean on the unmodified code.
+
+---
+
 ## 2026-10-11
 
 **Committed**
