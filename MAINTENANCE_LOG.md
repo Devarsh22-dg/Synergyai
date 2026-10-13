@@ -662,6 +662,47 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-13
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. Read `synergyai_app.py` end to end myself tonight
+  (not delegated to a subagent), cross-referencing every finding against
+  the 40-item Open items list above before considering it, plus
+  `requirements.txt`. `synergyai_app.py` hasn't changed since `c908620`
+  (2026-10-11) and had two consecutive clean reviews since then — tonight's
+  third review, also clean, found nothing new.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` via a direct AST scan: every import (`PIL`,
+  `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`, `pypdf`,
+  `requests`, `streamlit`) maps to a pin and vice versa; `auth`/`theme` are
+  local modules. No drift.
+- Checked the Nightly Evals GitHub Action directly (run #72, on `764481a`,
+  last night's log commit): still `failure`, same symptom class as every
+  run since 2026-08-19 per the standing open item above. No new evidence
+  gathered tonight — per that item's own reasoning, no new guess is
+  warranted without new evidence.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report, for the same reason as every
+  prior night (the Action's "Commit results" step is skipped whenever the
+  harness step fails).
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed tonight, per standing instructions. Re-confirmed via grep
+  that no stale reference to the deleted `otp_email.py` exists anywhere
+  outside this log's own history.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11) in `/tmp` (not the repo working directory) to run `py_compile` and
+  `evals/run_evals.py --dry-run` against the real pinned packages — both
+  passed clean on the unmodified code.
+
+---
+
 ## 2026-10-12
 
 **Committed**
