@@ -660,6 +660,81 @@ only once it is actually decided.
   is a product call, not a mechanical fix — left for a decision rather
   than guessed at.
 
+- **Three free-text `st.text_input` fields have no `max_chars`, unlike every
+  other free-text widget in the file** (raised 2026-10-14). Every
+  `st.text_area` is capped at `max_chars=MAX_CHARS` (15,000) — description
+  (~line 1868-1870), `new_desc` (~1877), notes (~2216-2222), `context_text`
+  (~2341-2344), `user_suggestion` (~2348-2351), `notes_text` (~2474-2477),
+  `change_request_text` (~2599-2605) — and the one other `st.text_input`,
+  workshop `focus_area` (~2141-2145), is capped the same way. Three
+  `st.text_input` calls are not: `proj["client"]` ("Client / Stakeholder",
+  ~line 1859), `new_name` ("New Project Name", ~line 1876), and `url_input`
+  ("Public webpage URL", ~line 1969). Verified directly by reading each site
+  (not taken on a review agent's word). Concrete, not just theoretical: a BA
+  can type an unbounded-length string into any of these three; `new_name`
+  becomes an unbounded dict key in `st.session_state["projects"]` and is
+  interpolated into dozens of widget keys and (HTML-escaped, not an XSS
+  concern) section headers; `url_input` is unbounded before
+  `_assert_public_url`/`fetch_url_text` ever see it. None of these crash
+  today — this is a consistency/hygiene gap, not an active bug. The
+  mechanically-obvious move (copy `max_chars=MAX_CHARS` onto all three)
+  isn't actually the right fix: `MAX_CHARS` (15,000) was sized for large
+  prompt-bound text bodies, not short identifying fields like a project
+  name, client name, or a URL, where a much smaller cap (a few hundred
+  chars) is the sane choice — picking the right per-field cap is a UX
+  judgment call, so left for a decision rather than guessed at.
+
+---
+
+## 2026-10-14
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. Delegated a full fresh end-to-end read of
+  `synergyai_app.py` (all 2770 lines) and `requirements.txt` to a background
+  review agent, primed with the current 41-item Open items list and
+  explicitly instructed not to re-raise any of them, not to open
+  `auth.py`/`db.py`, and not to touch `AUTH_ENABLED`/`check_access()`. It
+  found one new item (above — the `max_chars` gap on three `st.text_input`
+  fields), independently re-verified directly against the actual code
+  tonight before logging (read lines 1855-1879 and 1965-1974 myself to
+  confirm all three sites and cross-checked every `max_chars=` occurrence in
+  the file via grep). No FIX-NOW bug found — `synergyai_app.py` hasn't
+  changed since `c908620` (2026-10-11) and had three consecutive clean
+  reviews since then; tonight's fourth review surfaced only a
+  decision-needed consistency gap, nothing requiring an automated fix.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` via a direct AST-level scan (the review
+  agent's pass, cross-checked against the actual file's import lines and
+  `requirements.txt` pins): every import (`requests`, `beautifulsoup4`,
+  `streamlit`, `pandas`, `anthropic`, `pypdf`, `python-docx`, `python-pptx`,
+  `Pillow`, `openpyxl`) maps to a pin and vice versa; `streamlit-authenticator`
+  is pinned but used only inside `auth.py` (not read tonight), not drift.
+  No drift.
+- Checked the Nightly Evals GitHub Action directly (run #73, on `b720086`,
+  last night's log commit): still `failure`, same symptom class as every
+  run since 2026-08-19 per the standing open item above. No new evidence
+  gathered tonight — per that item's own reasoning, no new guess is
+  warranted without new evidence.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report, for the same reason as every
+  prior night (the Action's "Commit results" step is skipped whenever the
+  harness step fails).
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed tonight, per standing instructions; the review agent was
+  explicitly instructed not to open `auth.py`/`db.py` either and confirmed
+  it didn't.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.17) in the session scratchpad (not the repo working directory) to
+  run `py_compile` and `evals/run_evals.py --dry-run` against the real
+  pinned packages — both passed clean on the unmodified code.
+
 ---
 
 ## 2026-10-13
