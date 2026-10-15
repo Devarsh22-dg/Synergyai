@@ -686,6 +686,30 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-15 (later same day — Devarsh's own request, not the nightly routine)
+
+**Committed**
+
+- Removed the `schedule` trigger from `.github/workflows/nightly_evals.yml`
+  at Devarsh's explicit request ("stop nightly jobs"), per that day's
+  nightly entry below. `workflow_dispatch` was kept so the job can still be
+  run manually from the Actions tab. The already-open "Nightly Evals
+  GitHub Action has been failing every night since 2026-08-19" item above
+  is still valid and unresolved — this just stops it from running
+  automatically while that's true; it has not been removed from the Open
+  items list.
+- Devarsh also asked to stop the Claude Code "SynergyAI Nightly Maintenance"
+  routine itself (the thing that runs this file's own nightly entries).
+  That is an account-level routine, not something exposed to this session
+  as a tool — it was not disabled by this commit. Devarsh needs to disable
+  or delete it himself at its routine settings page
+  (https://claude.ai/code/routines/trig_01H2YoqPK99K3Sic5ejeqDQk). If he
+  does, tonight's dated entry below may end up being this file's last
+  automated one for a while — noted here so that's not confusing to a
+  future reader.
+
+---
+
 ## 2026-10-15
 
 **Committed**

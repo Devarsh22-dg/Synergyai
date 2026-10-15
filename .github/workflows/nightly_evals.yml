@@ -1,11 +1,12 @@
 name: Nightly Evals
 
 on:
-  schedule:
-    # 07:00 UTC daily — runs before the nightly maintenance routine (08:00 UTC)
-    # so its report is fresh when that routine reads it.
-    - cron: "0 7 * * *"
-  workflow_dispatch: {}   # lets you trigger a run manually from the Actions tab
+  # Schedule disabled 2026-10-15 at Devarsh's request — the job has failed
+  # every night since 2026-08-19 (connection error to the Anthropic API from
+  # the Actions runner, root cause not yet isolated; see MAINTENANCE_LOG.md).
+  # Re-add a `schedule:` trigger once that's fixed. workflow_dispatch still
+  # lets you trigger a run manually from the Actions tab in the meantime.
+  workflow_dispatch: {}
 
 permissions:
   contents: write
