@@ -686,6 +686,52 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-17
+
+**Committed**
+
+Nothing committed tonight.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` still unchanged since `c908620`
+  (2026-10-11) — tonight's review (a background agent given the full
+  current open-items list and instructed not to re-raise any of them or
+  open `auth.py`/`db.py`) read all ~2770 lines fresh across four passes
+  and came back clean: no new safe-to-fix bug. It did surface one
+  low-confidence candidate, deliberately not promoted to the open-items
+  list: `chat_with_bot()` (~line 1776) and the chat UI keep a single
+  global chat history shared across all projects rather than scoped per
+  project, so a user who switches projects mid-conversation keeps prior
+  turns about the old project in context alongside a `context_note` that
+  now describes the new one. Not logged as a tracked item because the
+  agent itself wasn't confident this is unwanted — ScopeBot's own system
+  prompt frames it as a general-purpose BA/PM assistant, not strictly
+  project-scoped, so this may be intentional rather than a gap. Noting it
+  here in case the pattern recurs on a future pass and turns out to be
+  real.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` via a direct AST scan: every import
+  (`PIL`, `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`,
+  `pypdf`, `requests`, `streamlit`) maps to a pin and vice versa;
+  `auth`/`theme` are local modules, the rest are stdlib. No drift.
+- Read `evals/LEARNED.md`: still no entries. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report — the Nightly Evals Action's
+  `schedule` trigger remains disabled (removed 2026-10-15 at Devarsh's
+  request, `workflow_dispatch` only), so there is no new run to check.
+  The already-open "Nightly Evals GitHub Action has been failing every
+  night since 2026-08-19" item is unaffected and remains unresolved.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed tonight; the review agent was instructed not to open
+  `auth.py`/`db.py` either and confirmed it didn't.
+- Installed `requirements.txt` into a scratch venv (Python 3.11.17, this
+  environment's fresh container had no pre-installed deps) to run
+  `py_compile` and `evals/run_evals.py --dry-run` against the real pinned
+  packages, not just a syntax check — both passed clean on the unmodified
+  code.
+
+---
+
 ## 2026-10-16
 
 **Committed**
