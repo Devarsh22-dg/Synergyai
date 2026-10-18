@@ -684,6 +684,74 @@ only once it is actually decided.
   chars) is the sane choice — picking the right per-field cap is a UX
   judgment call, so left for a decision rather than guessed at.
 
+- **Two more call sites of the already-open "Edits made in the Story /
+  Test Case `st.data_editor` tables are never written back to project
+  state" item** (raised 2026-10-18, extending the 2026-08-30 item). That
+  item names the Story and Test Case editors; verified directly tonight
+  that the Glossary editor (`edited_gl_df = st.data_editor(...)`,
+  `synergyai_app.py` ~line 2056) and the RTM editor (`edited_rtm_df =
+  st.data_editor(...)`, ~line 2579) have the identical gap: each edited
+  frame is used only for the two export buttons directly below it
+  (~lines 2061-2068 and 2584-2590) and is never saved back into
+  `proj["glossary"]` or `proj["rtm_rows"]`. A BA who corrects a glossary
+  term or an RTM link, then re-exports later or lets "Build / Refresh
+  RTM" regenerate, silently loses the edit — same fix shape as the
+  original item, so should be decided together with it rather than in
+  isolation.
+
+- **A sixth call site of the already-open "several `generate_*`/
+  `analyze_*` panels show no success confirmation" item** (raised
+  2026-10-18, extending the 2026-10-07 item). "Build / Refresh RTM"
+  (`synergyai_app.py` ~line 2561-2562) also shows no `st.success`/
+  `st.info` after a successful build, the same gap already tracked for
+  Stories, Test Cases, Business Glossary, Prioritization, and Workshop
+  Prep. Low severity for the same reason as the original item — the RTM
+  table appearing is itself visible proof of success — so bundling here
+  rather than fixing in isolation.
+
+---
+
+## 2026-10-18
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` still unchanged since `c908620`
+  (2026-10-11) and had six consecutive clean/near-clean reviews since
+  then (10-12, 10-13, 10-15, 10-16, 10-17 clean; 10-14 found the
+  `max_chars` item). Tonight's seventh review, by a background agent
+  given a full fresh end-to-end read of all 2770 lines (five sequential
+  passes) with instructions not to re-raise any of the 42 already-open
+  items and not to open `auth.py`/`db.py`, came back with no new
+  fix-now bug and two new decision-needed extensions of existing open
+  items (above — both independently re-verified directly against the
+  code myself, not taken on the agent's word, by reading lines
+  2045-2070 and 2555-2595 before logging).
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` myself via AST scan (the review agent
+  also did this pass separately): every import (`PIL`, `anthropic`,
+  `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`, `pypdf`, `requests`,
+  `streamlit`) maps to a pin and vice versa; `auth`/`theme` are local
+  modules, the rest are stdlib. No drift.
+- Read `evals/LEARNED.md`: still no entries. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report — the Nightly Evals Action's
+  `schedule` trigger remains disabled (removed 2026-10-15 at Devarsh's
+  request, `workflow_dispatch` only), so there is no new run to check.
+  The already-open "Nightly Evals GitHub Action has been failing every
+  night since 2026-08-19" item is unaffected and remains unresolved.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed tonight; the review agent was instructed not to open
+  `auth.py`/`db.py` either and confirmed it didn't.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.17) in the session scratchpad (not the repo working directory) to
+  run `py_compile` and `evals/run_evals.py --dry-run` against the real
+  pinned packages, not just a syntax check — both passed clean on the
+  unmodified code.
+
 ---
 
 ## 2026-10-17
