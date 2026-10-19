@@ -709,6 +709,99 @@ only once it is actually decided.
   table appearing is itself visible proof of success — so bundling here
   rather than fixing in isolation.
 
+- **Success messages shown immediately before `st.rerun()` are discarded
+  before the user ever sees them, at three call sites — including the
+  "replaced an existing document" overwrite/duplicate notes added by
+  earlier nightly fixes** (raised 2026-10-19). `st.rerun()` throws away
+  everything the current Streamlit run drew; the new run never redraws
+  the discarded message, so it cannot be seen even momentarily.
+  Confirmed with a minimal `streamlit.testing.v1.AppTest` script
+  reproducing the same pattern: the success element is empty on the next
+  run even though the underlying state change persisted. Three sites:
+  `synergyai_app.py` ~line 1890-1891 ("Created project '…'." before the
+  rerun needed for the project switch), ~1943-1944 (the "Added N
+  document(s)…" message, including the overwrite/duplicate notes from
+  commits `1df5b19` and `6fcbee4` — these are now silently invisible,
+  not just inconsistent), and ~1986-1987 ("Added '[URL] …' to the
+  repository"). A related gap noticed at the same site: the Source URL
+  path (~1984-1986) names the new document `[URL] {title}`, and
+  `add_doc_to_repo` silently replaces any existing document with that
+  exact name (re-fetching a URL, or fetching two different pages that
+  happen to share a `<title>` like "Home", silently overwrites the
+  earlier one) — unlike the upload path (~1937-1941) and the Elicitation
+  path (~2240-2245), this path has no overwrite/duplicate check or
+  message at all, so even fixing the rerun issue wouldn't by itself warn
+  the user here. Not a one-line fix: the right approach is either saving
+  the message in `st.session_state` and showing it at the top of the
+  next run (works at all three sites), or dropping `st.rerun()` at the
+  two sites where later code in the same run already redraws the
+  affected widgets (looks possible at ~1944 and ~1987, not at ~1891
+  which needs the rerun for the project switch itself) — a design choice,
+  plus a decision on whether the URL path should gain the same
+  "replaced an existing document" note the other two paths have. Left
+  for a decision rather than guessed at.
+
+---
+
+## 2026-10-19
+
+**Committed**
+
+- `74c7ddc` Fix .pptx embedded images in picture placeholders never
+  reaching vision description.
+
+**Worth knowing**
+
+- `extract_pptx_with_formatting()` matched `shape.shape_type == 13`
+  (`MSO_SHAPE_TYPE.PICTURE`) to find embedded images, but python-pptx
+  gives a picture inserted into a slide's picture/content placeholder
+  (the common "click icon to add picture" layout slot) `shape_type` 14
+  (`PLACEHOLDER`) instead, so it fell through and was silently skipped —
+  no error, no warning, just absent from what the vision model ever saw.
+  `PlaceholderPicture` is a genuine subclass of `Picture` in python-pptx,
+  so swapping the check to `isinstance(shape, Picture)` catches both
+  kinds while still excluding movie/media shapes (which don't descend
+  from `Picture`). Verified, not just read: built two throwaway `.pptx`
+  fixtures in the scratchpad (one free-floating picture only; one
+  placeholder picture + one free-floating picture) and ran the actual
+  function against both, stubbing out the vision call to count how many
+  images reached it. Before the fix: 0/1 and 1/2. After: 1/1 and 2/2.
+  This is a different gap from the already-open "docx/pptx header/
+  footer/master/layout content never read" item — these pictures are on
+  the slide body itself, in the area the extractor already walks; they
+  just weren't being recognized as pictures.
+- Delegated tonight's full-file review to a background agent, primed
+  with the complete 48-item Open items list and instructed not to
+  re-raise any of them and not to open `auth.py`/`db.py`. It returned
+  two new findings (the pptx fix above, and the `st.rerun()`-discards-
+  success-messages item newly added above). I independently re-verified
+  both myself before acting: re-read the exact code at ~line 974 and ran
+  my own before/after test against the agent's fixtures for the pptx
+  fix (reproducing its reported counts exactly), and separately
+  confirmed the `st.rerun()` call sites and the three line ranges named
+  in the new open item by reading them directly. No other new findings
+  — everything else it looked at matched an already-tracked item.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` via a direct AST scan: every import
+  (`PIL`, `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`,
+  `pypdf`, `requests`, `streamlit`) maps to a pin and vice versa;
+  `auth`/`theme` are local modules, the rest are stdlib. No drift.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report; the Nightly Evals Action's
+  `schedule` trigger remains disabled (removed 2026-10-15 at Devarsh's
+  request, `workflow_dispatch` only), so there is no new run to check.
+  The already-open "Nightly Evals GitHub Action has been failing every
+  night since 2026-08-19" item is unaffected and remains unresolved.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  opened or analyzed tonight; the review agent was instructed not to
+  open `auth.py`/`db.py` either and confirmed it didn't.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.17) in the session scratchpad (not the repo working directory) to
+  run `py_compile` and `evals/run_evals.py --dry-run` against the real
+  pinned packages, both before and after the fix — both passed clean.
+
 ---
 
 ## 2026-10-18
