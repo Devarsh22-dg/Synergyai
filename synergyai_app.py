@@ -17,6 +17,7 @@ from docx import Document
 from docx.table import Table as DocxTable
 from docx.text.hyperlink import Hyperlink as DocxHyperlink
 from pptx import Presentation
+from pptx.shapes.picture import Picture as PptxPicture
 from PIL import Image
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
@@ -971,7 +972,7 @@ def extract_pptx_with_formatting(uploaded_file, describe_images=True):
     for slide_num, slide in enumerate(prs.slides, start=1):
         slide_lines = [f"--- Slide {slide_num} ---"]
         for shape in _iter_pptx_shapes(slide.shapes):
-            if shape.shape_type == 13:  # MSO_SHAPE_TYPE.PICTURE
+            if isinstance(shape, PptxPicture):  # covers PICTURE shapes and picture placeholders
                 if len(image_bytes_list) < MAX_IMAGES_PER_DOC:
                     try:
                         image_bytes_list.append(shape.image.blob)
