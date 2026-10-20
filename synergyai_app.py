@@ -1246,9 +1246,9 @@ def fetch_url_text(url, timeout=10):
         # only trust resp.encoding when the server declared a charset.
         encoding = resp.encoding if "charset=" in content_type else "utf-8"
         try:
-            return raw_bytes.decode(encoding, errors="ignore"), url
+            return raw_bytes.decode(encoding, errors="ignore"), current
         except (LookupError, TypeError):
-            return raw_bytes.decode("utf-8", errors="ignore"), url
+            return raw_bytes.decode("utf-8", errors="ignore"), current
 
     # requests defaults resp.encoding to ISO-8859-1 (RFC 2616) whenever the
     # Content-Type header omits a charset — which is wrong for the common
@@ -1261,7 +1261,7 @@ def fetch_url_text(url, timeout=10):
     soup = BeautifulSoup(raw_bytes, "html.parser", from_encoding=(resp.encoding if declared_charset else None))
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
-    title = soup.title.string.strip() if (soup.title and soup.title.string) else url
+    title = soup.title.string.strip() if (soup.title and soup.title.string) else current
     raw = soup.get_text(separator="\n")
     cleaned = "\n".join(line.strip() for line in raw.splitlines() if line.strip())
     return cleaned, title
