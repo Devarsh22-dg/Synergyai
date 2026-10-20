@@ -743,6 +743,67 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-20
+
+**Committed**
+
+- `2d61abf` Fix fetch_url_text's no-title fallback using pre-redirect URL
+  instead of final URL.
+
+**Worth knowing**
+
+- `fetch_url_text()` (~line 1186) follows redirects by hand into a loop
+  variable `current`, reassigned to each hop's destination, and fetches/
+  SSRF-checks against `current` throughout. But all three no-title
+  fallback paths (text/plain decode at ~1249, its UTF-8 retry at ~1251,
+  and the HTML `<title>` fallback at ~1264) returned the original `url`
+  parameter instead of `current`. A Source URL that redirects (e.g. a
+  301 to a page with no `<title>` tag) got its document-repository entry
+  labeled `[URL] <the address the BA typed>` instead of the page the
+  content actually came from — a traceability/cosmetic mislabel, not a
+  content or security bug (the fetched *content* was always correct;
+  `_assert_public_url`'s SSRF check already runs against `current` on
+  every hop, untouched by this fix). Single caller (~line 1983), a plain
+  two-value unpack, so no other code path is affected by swapping the
+  fallback value.
+- Delegated tonight's full-file review to a background agent, primed
+  with the complete 43-item Open items list and instructed not to
+  re-raise any of them and not to open `auth.py`/`db.py`. It read all
+  2771 lines fresh in sequential passes and returned one new finding
+  (the fix above) plus one explicitly ruled-out candidate (a stale
+  `st.multiselect` selection after a repository document is removed —
+  reproduced with `streamlit.testing.v1.AppTest` and confirmed Streamlit
+  drops the stale selection cleanly on the next rerun, no crash). I
+  independently re-verified the title-fallback finding myself before
+  acting: read the exact code at lines 1186-1267 directly, then wrote my
+  own standalone repro (monkeypatching `requests.get` to simulate a
+  redirect to a page with no title, bypassing `_assert_public_url` since
+  there's no DNS in this sandbox) and confirmed the bug before the fix
+  and the correct behavior after, independent of the agent's own test
+  scripts.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` via a direct AST scan: every import
+  (`PIL`, `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`,
+  `pypdf`, `requests`, `streamlit`) maps to a pin and vice versa;
+  `auth`/`theme` are local modules, the rest are stdlib. No drift.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report; the Nightly Evals Action's
+  `schedule` trigger remains disabled (removed 2026-10-15 at Devarsh's
+  request, `workflow_dispatch` only), so there is no new run to check.
+  The already-open "Nightly Evals GitHub Action has been failing every
+  night since 2026-08-19" item is unaffected and remains unresolved.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  opened or analyzed tonight; the review agent was instructed not to
+  open `auth.py`/`db.py` either and confirmed it didn't.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv in the
+  session scratchpad (not the repo working directory) to run
+  `py_compile` and `evals/run_evals.py --dry-run` against the real
+  pinned packages, both before and after the fix — both passed clean.
+
+---
+
 ## 2026-10-19
 
 **Committed**
