@@ -743,6 +743,59 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-21
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. Delegated tonight's full-file review to a
+  background agent, primed with the complete Open items list (as it
+  stood before tonight — 55+ items) and instructed not to re-raise any
+  of them and not to open `auth.py`/`db.py`. It read all 2771 lines of
+  `synergyai_app.py` fresh across five sequential passes (lines 1-500,
+  500-1000, 1000-1500, 1500-2000, 2000-2500, 2500-2771), checked every
+  AI-call function, every file-parsing/extraction path, every tab's
+  render block, and the main navigation block, and came back with no
+  new safe-to-fix bug and no new open-items candidate. It re-verified
+  the two most recent production fixes are intact and un-regressed: the
+  pptx `isinstance(shape, PptxPicture)` check (~line 975) and
+  `fetch_url_text`'s three no-title fallbacks returning `current`
+  instead of `url` (~lines 1249, 1251, 1264). A handful of things it
+  looked at during the read and explicitly ruled out as not bugs: the
+  `for`/`else` loop in `fetch_url_text`, `_blank_or_value`'s handling of
+  `0`/`False` story fields together with openpyxl's type handling, the
+  PDF-encrypted-with-empty-password path, and the zip-bomb guard's
+  ordering — all read as correct on close inspection.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` myself via a direct AST scan (the review
+  agent also did this pass separately): every import (`PIL`,
+  `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`, `pypdf`,
+  `requests`, `streamlit`) maps to a pin and vice versa; `auth`/`theme`
+  are local modules, the rest (`os`, `io`, `re`, `html`, `base64`,
+  `socket`, `ipaddress`, `zipfile`, `urllib`, `datetime`) are stdlib. No
+  drift.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report; the Nightly Evals Action's
+  `schedule` trigger remains disabled (removed 2026-10-15 at Devarsh's
+  request, `workflow_dispatch` only), so there is no new run to check.
+  The already-open "Nightly Evals GitHub Action has been failing every
+  night since 2026-08-19" item is unaffected and remains unresolved.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  opened or analyzed tonight; the review agent was instructed not to
+  open `auth.py`/`db.py` either and confirmed it didn't.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11, session scratchpad, not the repo working directory) to run
+  `py_compile` and `evals/run_evals.py --dry-run` against the real
+  pinned packages, not just a syntax check — both passed clean on the
+  unmodified code.
+
+---
+
 ## 2026-10-20
 
 **Committed**
