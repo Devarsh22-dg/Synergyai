@@ -849,6 +849,7 @@ def extract_docx_with_formatting(uploaded_file, describe_images=True):
         if line.strip():
             lines.append(line)
     body_text = "\n".join(lines)
+    has_body_text = bool(body_text.strip())
 
     try:
         comments = list(doc.comments)
@@ -859,6 +860,7 @@ def extract_docx_with_formatting(uploaded_file, describe_images=True):
         if comment_lines:
             body_text += "\n\n--- Reviewer Comments (from Word comments) ---\n" + "\n".join(comment_lines)
 
+    has_images = False
     if describe_images:
         image_bytes_list = []
         for rel in doc.part.rels.values():
@@ -873,8 +875,18 @@ def extract_docx_with_formatting(uploaded_file, describe_images=True):
             with st.spinner(f"Reading {min(len(image_bytes_list), MAX_IMAGES_PER_DOC)} embedded image(s)..."):
                 descriptions = describe_images_with_vision(image_bytes_list, uploaded_file.name)
             if descriptions:
+                has_images = True
                 desc_lines = [f"{i+1}. {d}" for i, d in enumerate(descriptions)]
                 body_text += "\n\n--- Images/Screenshots Found in Document (AI-described) ---\n" + "\n".join(desc_lines)
+
+    if not (has_body_text or has_images):
+        # Checked against the pre-enrichment body/image content, not the final
+        # `body_text` — a Word comment alone (appended above) would otherwise make
+        # `body_text.strip()` truthy even when the document's actual body is empty,
+        # masking the empty/image-only case extract_text_from_upload's generic
+        # check is meant to catch (it now skips "docx", same as it already does
+        # for "pdf", since this function owns the check for both).
+        st.warning(f'"{uploaded_file.name}": no extractable text found — it may be empty or image-only.')
 
     return body_text
 
@@ -904,6 +916,7 @@ def extract_pdf_with_annotations(uploaded_file, describe_images=True):
             )
     pages = [page.extract_text() or "" for page in reader.pages]
     text = "\n".join(pages)
+    has_body_text = bool(text.strip())
 
     annotation_lines = []
     for page in reader.pages:
@@ -917,6 +930,7 @@ def extract_pdf_with_annotations(uploaded_file, describe_images=True):
     if annotation_lines:
         text += "\n\n--- Reviewer Comments (from PDF annotations) ---\n" + "\n".join(annotation_lines)
 
+    has_images = False
     if describe_images:
         image_bytes_list = []
         for page in reader.pages:
@@ -933,10 +947,15 @@ def extract_pdf_with_annotations(uploaded_file, describe_images=True):
             with st.spinner(f"Reading {min(len(image_bytes_list), MAX_IMAGES_PER_DOC)} embedded image(s)..."):
                 descriptions = describe_images_with_vision(image_bytes_list, uploaded_file.name)
             if descriptions:
+                has_images = True
                 desc_lines = [f"{i+1}. {d}" for i, d in enumerate(descriptions)]
                 text += "\n\n--- Images/Screenshots Found in Document (AI-described) ---\n" + "\n".join(desc_lines)
 
-    if not text.strip():
+    if not (has_body_text or has_images):
+        # Checked against the pre-enrichment body/image content, not the final
+        # `text` — a sticky-note annotation alone (appended above) would otherwise
+        # make `text.strip()` truthy even when the document's actual page content
+        # is empty, masking the exact scanned/image-only case this warning exists for.
         st.warning("No extractable text found in this PDF — it may be a scanned/image-only document.")
 
     return text
@@ -1128,8 +1147,8 @@ def extract_text_from_upload(uploaded_file):
         st.error(f'"{name}": couldn\'t read this file: {e}')
         return ""
 
-    if ext != "pdf" and not text.strip():
-        if ext in ("docx", "pptx"):
+    if ext not in ("pdf", "docx") and not text.strip():
+        if ext == "pptx":
             st.warning(f'"{name}": no extractable text found — it may be empty or image-only.')
         else:
             st.warning(f'"{name}": no extractable text found — it may be empty.')
