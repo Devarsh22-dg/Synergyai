@@ -743,6 +743,86 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-22
+
+**Committed**
+
+- `1838435` Fix no-extractable-text warning being masked by comment/
+  annotation-only content.
+
+**Worth knowing**
+
+- `extract_pdf_with_annotations()` (~line 894) and
+  `extract_docx_with_formatting()` (~line 784) each append reviewer
+  comments/annotations into the same text variable (`text`/`body_text`)
+  they later return, and the "no extractable text found" warning checked
+  that final, enriched variable. So a scanned/image-only PDF, or an empty
+  `.docx`, carrying even one sticky-note comment (e.g. "please review
+  section 3") never triggered the warning — the comment text alone made
+  `.strip()` truthy, even though the document's actual page/body content
+  was empty. Fixed by capturing a `has_body_text` flag right after the
+  page/paragraph text is assembled (before comments are appended) and a
+  `has_images` flag only set when `describe_images_with_vision()` actually
+  returned descriptions, then checking `not (has_body_text or has_images)`
+  instead of the final enriched text. Images still legitimately count as
+  content (a scanned PDF whose pages get AI-described isn't "empty"), only
+  comments/annotations no longer mask emptiness. `extract_text_from_upload`'s
+  generic empty-check (~line 1147) now skips `"docx"` the same way it
+  already skipped `"pdf"`, since both functions now own their own check
+  internally; `.pptx` is unaffected (no comment-extraction path there, so
+  its existing check was already correct) and still goes through the
+  generic path.
+- Verified directly, not taken on a review agent's word: read both
+  functions and the generic check end to end before writing the fix; built
+  three throwaway fixtures in the scratchpad (a PDF with one sticky-note
+  annotation and no page text, a `.docx` with one Word comment and only a
+  whitespace run, and a normal PDF with real text plus an annotation) and
+  ran the actual functions against each, with `st.warning` wired to print
+  via `evals/streamlit_shim.py`. Before the fix: the annotation-only PDF
+  and comment-only `.docx` both produced no warning (bug reproduced).
+  After the fix: both correctly warn, and the normal PDF with real text
+  plus an annotation still produces no warning (no regression on the
+  ordinary case). Confirmed the pre-fix behavior by `git stash`/`stash pop`
+  around the same test script rather than trusting memory of the diff.
+- Delegated tonight's full-file review to a background agent, primed with
+  the complete 43-item Open items list (as it stood before tonight) and
+  instructed not to re-raise any of them and not to open `auth.py`/`db.py`.
+  It read all 2771 lines fresh across six sequential passes and returned
+  one new finding (the fix above, reported as a "safe fix candidate") and
+  no new open-item candidates — it explicitly said it looked for more
+  (CSV/XLSX edge cases, dashboard metric semantics, redirect/SSRF loop
+  logic, chat merge logic, RTM fuzzy-matching, data_editor/session-state
+  interactions, file-extension parsing) and either found them already
+  covered by an existing open item or the existing handling correct.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` myself via a direct AST scan (the review
+  agent also did this pass separately, including the reverse direction —
+  every pin is actually used): every import (`PIL`, `anthropic`, `bs4`,
+  `docx`, `openpyxl`, `pandas`, `pptx`, `pypdf`, `requests`, `streamlit`)
+  maps to a pin and vice versa; `streamlit-authenticator` is pinned but
+  not directly imported in `synergyai_app.py`, which matches the file's
+  own top-of-file comment that `auth.py` pulls it in lazily — not drift.
+  `auth`/`theme` are local modules, the rest (`os`, `io`, `re`, `html`,
+  `base64`, `socket`, `ipaddress`, `zipfile`, `urllib`, `datetime`) are
+  stdlib. No drift.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report; the Nightly Evals Action's
+  `schedule` trigger remains disabled (removed 2026-10-15 at Devarsh's
+  request, `workflow_dispatch` only), so there is no new run to check.
+  The already-open "Nightly Evals GitHub Action has been failing every
+  night since 2026-08-19" item is unaffected and remains unresolved.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed tonight; the review agent was instructed not to open
+  `auth.py`/`db.py` either and confirmed it didn't.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (Python
+  3.11.17, session scratchpad, not the repo working directory) to run
+  `py_compile` and `evals/run_evals.py --dry-run` against the real pinned
+  packages, both before and after the fix — both passed clean.
+
+---
+
 ## 2026-10-21
 
 **Committed**
