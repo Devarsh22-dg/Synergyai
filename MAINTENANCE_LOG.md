@@ -743,6 +743,56 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-23
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. Delegated tonight's full-file review to a
+  background agent, primed with the complete Open items list (as it
+  stood before tonight) and instructed not to re-raise any of them and
+  not to open `auth.py`/`db.py`. It read all 2790 lines of
+  `synergyai_app.py` fresh across six sequential passes (1-500, 500-1000,
+  1000-1500, 1500-2000, 2000-2500, 2500-2790) and returned no safe-fix
+  candidate and no new open-item candidate — everything notable it saw
+  matched an already-tracked item (RTM-overwrite, dashboard counter
+  semantics, markdown-echoed text, the three uncapped `st.text_input`
+  fields, the six silent-empty-result `generate_*`/RTM sites, the
+  stale-result-after-failure pattern, `data_editor` edits not written
+  back, `st.rerun()` discarding success messages, case-sensitive dedup).
+  It also explicitly re-verified the three most recent production fixes
+  (2026-10-19 pptx picture-placeholder fix, 2026-10-20 redirect-title
+  fix, 2026-10-22 comment/annotation-masking fix) are intact and
+  un-regressed, and checked several other code paths (archive/SSRF
+  guards, chat-history windowing, RTM fuzzy matching, `_blank_or_value`,
+  the project-removal loop, MoSCoW sort mapping) that it ruled out as
+  correct on inspection.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` myself via a direct AST scan: every
+  import (`PIL`, `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`,
+  `pptx`, `pypdf`, `requests`, `streamlit`) maps to a pin and vice versa;
+  `auth`/`theme` are local modules, the rest (`os`, `io`, `re`, `html`,
+  `base64`, `socket`, `ipaddress`, `zipfile`, `urllib`, `datetime`) are
+  stdlib. No drift.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report; the Nightly Evals Action's
+  `schedule` trigger remains disabled (removed 2026-10-15 at Devarsh's
+  request, `workflow_dispatch` only), so there is no new run to check.
+  The already-open "Nightly Evals GitHub Action has been failing every
+  night since 2026-08-19" item is unaffected and remains unresolved.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  opened or analyzed tonight; the review agent was instructed not to
+  open `auth.py`/`db.py` either and confirmed it didn't.
+- Ran `python3 -m py_compile synergyai_app.py` as a sanity check even
+  though no code change was made tonight — passed clean. No eval
+  dry-run needed since `synergyai_app.py` was not modified.
+
+---
+
 ## 2026-10-22
 
 **Committed**
