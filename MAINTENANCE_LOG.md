@@ -743,6 +743,66 @@ only once it is actually decided.
 
 ---
 
+## 2026-10-25
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` has not changed since commit
+  `1838435` (2026-10-22), so this is the fourth consecutive night reviewing
+  the same unmodified file. Read all 2790 lines myself directly, sequentially
+  in six chunks (1-500, 501-1000, 1001-1500, 1501-2000, 2001-2500, 2501-2790),
+  cross-checking every function and render block against the full Open items
+  list — rather than delegating to a background agent as the last three
+  nights did — and found no safe-fix candidate and no new open-item
+  candidate. Everything notable matched an already-tracked item (RTM
+  overwrite, dashboard counter semantics, markdown-echoed free text and
+  filenames, the three uncapped `st.text_input` fields, the `generate_*`/RTM
+  silent-empty-result and no-success-confirmation gaps, the stale-result-
+  after-failure pattern across all 9 now-tracked panels, `data_editor` edits
+  not written back for Stories/Test Cases/Glossary/RTM, `st.rerun()`
+  discarding success messages, case-sensitive dedup for both project names
+  and repository filenames, the SSRF guard's two confirmed unblocked IPv4
+  ranges, and the PM module's dead "Select Project to View" dropdown).
+  Traced through `fetch_url_text`'s redirect loop, the zip-bomb archive
+  guard, RTM fuzzy-matching (`_label_overlap`/`build_rtm_rows`),
+  `_blank_or_value`'s NaN/list/dict handling, chat-history windowing and
+  merging (`_recent_chat_messages`), and the docx/pptx/PDF extraction and
+  image-description paths (including the 2026-10-22 comment/annotation-
+  masking fix) and found all of it correct on inspection, no regressions.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` via a direct AST scan (`ast.walk` over
+  `Import`/`ImportFrom` nodes): every import (`PIL`, `anthropic`, `bs4`,
+  `docx`, `openpyxl`, `pandas`, `pptx`, `pypdf`, `requests`, `streamlit`)
+  maps to a pin and vice versa; `streamlit-authenticator` is pinned but not
+  directly imported (pulled in lazily by `auth.py`, per the file's own
+  top-of-file comment) — not drift. `auth`/`theme` are local modules, the
+  rest (`os`, `io`, `re`, `html`, `base64`, `socket`, `ipaddress`,
+  `zipfile`, `urllib`, `datetime`) are stdlib. No drift.
+- Read `evals/LEARNED.md`: still no entries (empty since inception) — no
+  confirmed AI-output regression to act on. `evals/latest_report.md` is
+  still the same stale 2026-08-18 report; the Nightly Evals Action's
+  `schedule` trigger remains disabled (removed 2026-10-15 at Devarsh's
+  request, `workflow_dispatch` only), so there is no new run to check. The
+  already-open "Nightly Evals GitHub Action has been failing every night
+  since 2026-08-19" item is unaffected and remains unresolved.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed tonight beyond the one-line `AUTH_ENABLED = True` /
+  `check_access()` definitions already visible in the lines of
+  `synergyai_app.py` read above; no edits were made to either file or to
+  `AUTH_ENABLED`/`check_access()`.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (session
+  scratchpad, not the repo working directory) and ran both
+  `python3 -m py_compile synergyai_app.py` and
+  `python3 evals/run_evals.py --dry-run` against the real pinned packages
+  — both passed clean, no API calls made.
+
+---
+
 ## 2026-10-24
 
 **Committed**
