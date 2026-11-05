@@ -743,6 +743,64 @@ only once it is actually decided.
 
 ---
 
+## 2026-11-05
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` has not changed since commit
+  `1838435` (2026-10-22) — this is the fifteenth consecutive night reviewing
+  the same unmodified file. Delegated a full independent line-by-line
+  read-through (2790 lines, all chunks) to a fresh background-context agent,
+  primed with the complete Open Items list and instructed to be skeptical of
+  its own findings rather than flag something as "safe to fix" just because
+  it looked small at first glance. It found nothing new: every candidate it
+  checked closely before ruling out (a zip entry-*count* bomb distinct from
+  the existing declared-uncompressed-*size* check in `_assert_safe_archive`
+  — real in principle but bounded by the existing 20MB upload cap to at most
+  a few hundred thousand entries, so not flagged as a new distinct gap;
+  `.pptx` hyperlink handling, confirmed not analogous to the already-open
+  `.docx` hyperlink-extraction gap since pptx hyperlinks are a plain run
+  property already visible via `.runs`; and re-confirming the "Build/Refresh
+  RTM" button has no failure path to go stale, since it's a pure local
+  function with no AI call) either matched an already-tracked item or had no
+  tradeoff-free fix available. No new safe-to-fix or needs-a-decision
+  candidate surfaced, and no edits were made.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` myself via a direct AST scan (`ast.walk` over
+  `Import`/`ImportFrom` nodes): all ten third-party imports (`PIL`,
+  `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`, `pypdf`,
+  `requests`, `streamlit`) map to a pin and vice versa; `auth`/`theme` are
+  local modules; the rest is stdlib. No drift.
+- Read `evals/LEARNED.md`: still "No entries yet" — no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the same stale
+  2026-08-18 report, and `evals/runs.jsonl` is still empty; confirmed
+  `.github/workflows/nightly_evals.yml`'s `schedule` trigger remains disabled
+  (`workflow_dispatch` only, per the 2026-10-15 decision). The already-open
+  "Nightly Evals GitHub Action has been failing" item is unaffected and
+  remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (session
+  scratchpad, not the repo working directory) and ran both
+  `python3 -m py_compile synergyai_app.py` and
+  `python3 evals/run_evals.py --dry-run` against the real pinned packages
+  myself — both passed clean (7 fixtures loaded), no API calls made.
+- Grepped the repo for stale `otp_email.py` references: none found outside
+  this log's own historical notes about its 2026-08-17 deletion.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened or
+  analyzed tonight beyond the one-line definitions already visible in
+  `synergyai_app.py`; the review agent was explicitly instructed not to open
+  `auth.py`/`db.py` and confirmed it didn't. No edits were made to either
+  file or to `AUTH_ENABLED`/`check_access()`.
+
+No new items added to the Open items list tonight — nothing surfaced that
+wasn't already tracked above.
+
+---
+
 ## 2026-11-04
 
 **Committed**
