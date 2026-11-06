@@ -741,6 +741,99 @@ only once it is actually decided.
   "replaced an existing document" note the other two paths have. Left
   for a decision rather than guessed at.
 
+- **CSV exports (4 call sites) can carry CSV/formula injection
+  (CWE-1236), the same risk class as the Excel formula-injection issue
+  fixed 2026-11-06, but with no safe mechanical fix** (raised
+  2026-11-06). `to_csv(...)` is called at `synergyai_app.py` ~lines 2146,
+  2333, 2525, and 2563. Any cell whose text starts with `=`, `+`, `-`, or
+  `@` (AI output grounded in a fetched webpage, or BA-typed text in a
+  `st.data_editor` table) is written byte-for-byte into the CSV, and
+  Excel treats such a leading character as a live formula when the file
+  is opened there — confirmed as the classic, well-documented CSV-
+  injection pattern, not theoretical. Unlike the xlsx case (fixed tonight
+  by flipping openpyxl's cell type back to text with zero visible change),
+  CSV has no equivalent metadata-only fix: the standard mitigation
+  (prefixing the cell with a leading `'`) changes the literal file
+  content, and these CSVs are positioned as ready to import into
+  JIRA/Azure DevOps — a leading `'` on a legitimate value like `-5%` or a
+  step beginning `- click Save` would land in the imported ticket/field
+  and could corrupt real data. Picking which leading characters to guard
+  against and accepting (or avoiding) that content change is a product
+  decision, not a mechanical patch, so left open rather than guessed at.
+
+---
+
+## 2026-11-06
+
+**Committed**
+
+- `dc2b2a5` Prevent CSV/formula injection in Excel exports (xlsx)
+
+**Worth knowing**
+
+- `synergyai_app.py` had not changed since commit `1838435` (2026-10-22) —
+  15 consecutive clean nights. Delegated a full independent line-by-line
+  read-through (2790 lines, all four chunks) to a fresh background-context
+  agent, primed with the complete Open Items list and instructed to be
+  skeptical of its own findings. It found one genuinely new, concrete
+  issue: `build_xlsx_from_df` and `build_visio_dataviz_xlsx` (the two
+  functions that build every `.xlsx` export — Glossary, Action Items,
+  Prioritization, Data Dictionary, As-Is/To-Be, Stories, Test Cases, RTM,
+  and the Visio flowchart file) write every cell through openpyxl's
+  `ws.append`, which stores any string starting with `=` as a live
+  formula rather than text. Verified directly (not taken on the agent's
+  word): wrote `'=HYPERLINK("http://x","click")'` and `'= see section 4'`
+  through the app's actual `_blank_or_value()` path with the pinned
+  openpyxl==3.1.5, confirmed both landed with `cell.data_type == "f"` in
+  the saved file (a real formula Excel will execute on open, not just
+  oddly-formatted text), and confirmed the source can plausibly be AI
+  output grounded in a fetched third-party webpage (Source URL) or BA-
+  typed `st.data_editor` text — concrete, not hypothetical, for a tool
+  moving toward SOC2-relevant use. Fixed by adding `_force_literal_text()`
+  (flips any cell openpyxl classified as a formula back to type `"s"`)
+  and calling it right after each function's row-write loop, before any
+  column-width/number-format pass runs. Verified the fix directly: the
+  same two strings round-trip through save+reload as literal text with
+  the exact same visible value, and ordinary values (numbers, `-5%`,
+  `@mentions`, blanks) are untouched. The corresponding CSV-export gap
+  (4 call sites) is real but has no equivalent safe mechanical fix —
+  logged as a new open item above rather than guessed at.
+- The agent's review also considered and ruled out: a zip entry-count
+  bomb (already covered by the existing size-based archive guard and the
+  20MB upload cap), `.pptx` hyperlink handling (not analogous to the open
+  `.docx` hyperlink gap — pptx hyperlinks are a plain run property), IPv6
+  NAT64/6to4 addresses against the open SSRF-guard item (tested directly
+  on Python 3.11.18: both are already blocked by `is_reserved`/
+  `is_private`, so the open item's IPv6 gap, if any, is narrower than
+  those two ranges), long webpage titles as document names, and markdown
+  rendering of ScopeBot chat input (normal chat behavior, not a bug). All
+  either matched an already-tracked item or weren't real gaps.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` myself via a direct AST scan (`ast.walk`
+  over `Import`/`ImportFrom` nodes): all ten third-party imports (`PIL`,
+  `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`, `pypdf`,
+  `requests`, `streamlit`) map to a pin and vice versa; `auth`/`theme` are
+  local modules; the rest is stdlib. No drift.
+- Read `evals/LEARNED.md`: still "No entries yet" — no confirmed
+  AI-output regression to act on. `evals/latest_report.md` is still the
+  same stale 2026-08-18 report, and `evals/runs.jsonl` is still empty;
+  confirmed `.github/workflows/nightly_evals.yml`'s `schedule` trigger
+  remains disabled (`workflow_dispatch` only, per the 2026-10-15
+  decision). The already-open "Nightly Evals GitHub Action has been
+  failing" item is unaffected and remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (session
+  scratchpad, not the repo working directory) and ran both
+  `python3 -m py_compile synergyai_app.py` and
+  `python3 evals/run_evals.py --dry-run` myself, both before and after
+  the fix — both passed clean both times (7 fixtures loaded), no API
+  calls made.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed tonight beyond the one-line definitions already visible in
+  `synergyai_app.py`; the review agent was explicitly instructed not to
+  open `auth.py`/`db.py` and confirmed it didn't. No edits were made to
+  either file or to `AUTH_ENABLED`/`check_access()`.
+
 ---
 
 ## 2026-11-05
