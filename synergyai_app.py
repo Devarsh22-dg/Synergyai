@@ -1318,6 +1318,15 @@ def _blank_or_value(v):
     return v
 
 
+def _force_literal_text(ws):
+    """openpyxl stores any str starting with '=' as a live formula; nothing this
+    app exports is ever meant to be one, so keep such cells as literal text."""
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.data_type == "f":
+                cell.data_type = "s"
+
+
 # --- File Building (generating downloads) ---
 
 def build_xlsx_from_df(sheet_name, df):
@@ -1330,6 +1339,7 @@ def build_xlsx_from_df(sheet_name, df):
         cell.fill = PatternFill(start_color="1F2333", end_color="1F2333", fill_type="solid")
     for _, row in df.iterrows():
         ws.append([_blank_or_value(v) for v in row.tolist()])
+    _force_literal_text(ws)
     for i in range(1, len(df.columns) + 1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = 28
     buf = io.BytesIO()
@@ -1407,6 +1417,7 @@ def build_visio_dataviz_xlsx(rows):
             "",
             _blank_or_value(r.get("shape_type", "Process")),
         ])
+    _force_literal_text(ws)
     # Force the ID columns to explicit text format — otherwise Excel may auto-interpret
     # values like "010" as the number 10, which would break step matching on import.
     for row in ws.iter_rows(min_row=2, min_col=1, max_col=1):
