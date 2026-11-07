@@ -763,6 +763,68 @@ only once it is actually decided.
 
 ---
 
+## 2026-11-07
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` has not changed since commit
+  `dc2b2a5` (2026-11-06, the Excel formula-injection fix) — this is the
+  sixteenth consecutive night with the file stable. Delegated a full
+  independent line-by-line read-through (all 2801 lines, four full passes)
+  to a fresh background-context agent, primed with the complete Open Items
+  list (through the 2026-11-06 CSV-injection entry) and instructed to be
+  skeptical of its own findings. It found nothing new: every concrete gap it
+  noticed while reading (stale-result rendering, missing success banners,
+  markdown-interpolated text, uncapped text inputs, case-sensitive name
+  dedup, unsaved data_editor edits, Workshop Prep's `.md` export, the
+  2,000-char silent truncation, the RTM overwrite, CSV formula injection,
+  the SSRF guard's two range gaps, PDF image decompression, docx/pptx
+  header/footer/master blindness, docx rels-order) already matched an entry
+  already tracked above. It also specifically checked whether a genuinely
+  empty (not erroring) API chat reply gets mismarked as a failure in
+  `_recent_chat_messages`/`chat_with_bot` (`failed = not reply` treats `""`
+  the same as `None`) — real in principle but an exceedingly rare edge case
+  with no clean fix available (an empty-but-successful reply isn't
+  meaningfully different from a failure to the user), so not flagged as a
+  new item. No new safe-to-fix or needs-a-decision candidate surfaced, and
+  no edits were made.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` myself via a direct AST scan (`ast.walk` over
+  `Import`/`ImportFrom` nodes): all ten third-party imports (`PIL`,
+  `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`, `pypdf`,
+  `requests`, `streamlit`) map to a pin and vice versa; also confirmed
+  `streamlit-authenticator` (listed but not imported by `synergyai_app.py`
+  itself) is genuinely used, by `auth.py` (not opened beyond that grep
+  match). `auth`/`theme` are local modules; the rest is stdlib. No drift.
+- Read `evals/LEARNED.md`: still "No entries yet" — no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the same stale
+  2026-08-18 report, and `evals/runs.jsonl` is still empty; confirmed
+  `.github/workflows/nightly_evals.yml`'s `schedule` trigger remains
+  disabled (`workflow_dispatch` only, per the 2026-10-15 decision). The
+  already-open "Nightly Evals GitHub Action has been failing" item is
+  unaffected and remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (outside the
+  repo working directory) and ran both `python3 -m py_compile
+  synergyai_app.py` and `python3 evals/run_evals.py --dry-run` against the
+  real pinned packages myself — both passed clean (7 fixtures loaded), no
+  API calls made.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed tonight beyond the one-line definitions already visible in
+  `synergyai_app.py` and the one grep match confirming `auth.py` imports
+  `streamlit_authenticator`; the review agent was explicitly instructed not
+  to open `auth.py`/`db.py` and confirmed it didn't. No edits were made to
+  either file or to `AUTH_ENABLED`/`check_access()`.
+
+No new items added to the Open items list tonight — nothing surfaced that
+wasn't already tracked above.
+
+---
+
 ## 2026-11-06
 
 **Committed**
