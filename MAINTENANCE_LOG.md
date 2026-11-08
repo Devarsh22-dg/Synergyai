@@ -763,6 +763,66 @@ only once it is actually decided.
 
 ---
 
+## 2026-11-08
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` has not changed since commit
+  `dc2b2a5` (2026-11-06, the Excel formula-injection fix) — seventeenth
+  consecutive night with the file stable. Delegated a full independent
+  line-by-line read-through (2801 lines, five sequential chunks covering
+  every line, plus a second targeted pass re-checking specific functions —
+  `fetch_url_text`'s redirect loop, `build_rtm_rows`, `_assert_safe_archive`,
+  the dashboard counters, the Documentation Generator/Story Creator pre-fill
+  logic, chat history handling — against the Open Items list, plus a
+  repo-wide grep for TODO/FIXME/HACK markers) to a fresh background-context
+  agent, primed with the complete, verbatim Open Items list and instructed
+  to be skeptical of its own findings. It found nothing new: every concrete
+  thing it noticed (the 2,000-char doc-prefill truncation, unsaved Glossary/
+  RTM `data_editor` edits, Workshop Prep's boolean "drafted" metric checked
+  specifically against the counter-semantics item and ruled not a match,
+  Workshop Prep's `.md` export markdown interpolation, the `.docx`
+  hyperlink-extraction gap it confirmed was already fixed by commit
+  `8325cf1` and is not a regression) already matched an existing entry or
+  wasn't a real gap. It also considered whether `.pptx` table-cell merging
+  has the same duplicate-text bug as the tracked `.docx` merge-dedup items,
+  but couldn't verify it against a real adversarial `.pptx` sample and
+  correctly declined to report it as confirmed rather than guess. No new
+  safe-to-fix or needs-a-decision candidate surfaced, and no edits were
+  made.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` myself via a direct AST scan (`ast.walk`
+  over `Import`/`ImportFrom` nodes): all ten third-party imports (`PIL`,
+  `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`, `pypdf`,
+  `requests`, `streamlit`) map to a pin and vice versa; `auth`/`theme` are
+  local modules, the rest is stdlib. No drift.
+- Read `evals/LEARNED.md`: still "No entries yet" — no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the same stale
+  2026-08-18 report, and `.github/workflows/nightly_evals.yml`'s `schedule`
+  trigger remains disabled (`workflow_dispatch` only, per the 2026-10-15
+  decision). The already-open "Nightly Evals GitHub Action has been
+  failing" item is unaffected and remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (outside the
+  repo working directory) and ran both `python3 -m py_compile
+  synergyai_app.py` and `python3 evals/run_evals.py --dry-run` against the
+  real pinned packages myself — both passed clean (7 fixtures loaded), no
+  API calls made.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed tonight beyond the one-line definitions already visible in
+  `synergyai_app.py`; the review agent was explicitly instructed not to
+  open `auth.py`/`db.py` and confirmed it didn't. No edits were made to
+  either file or to `AUTH_ENABLED`/`check_access()`.
+
+No new items added to the Open items list tonight — nothing surfaced that
+wasn't already tracked above.
+
+---
+
 ## 2026-11-07
 
 **Committed**
