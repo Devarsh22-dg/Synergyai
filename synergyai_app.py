@@ -546,16 +546,18 @@ def get_project():
 
 
 def add_doc_to_repo(proj, name, text, ext):
-    existing_names = {d["name"] for d in proj["documents"]}
-    if name in existing_names:
-        proj["documents"] = [d for d in proj["documents"] if d["name"] != name]
-    proj["documents"].append({
+    entry = {
         "name": name,
         "text": text,
         "ext": ext,
         "added_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "char_count": len(text),
-    })
+    }
+    for i, d in enumerate(proj["documents"]):
+        if d["name"] == name:
+            proj["documents"][i] = entry
+            return
+    proj["documents"].append(entry)
 
 
 # --- API Helpers ---
