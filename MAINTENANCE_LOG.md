@@ -763,6 +763,73 @@ only once it is actually decided.
 
 ---
 
+## 2026-11-11
+
+**Committed**
+
+- `d2356ef` — Fix `add_doc_to_repo` silently reordering the document
+  repository on replace.
+
+**Worth knowing**
+
+- `synergyai_app.py` had been stable since commit `dc2b2a5` (2026-11-06)
+  for 19 consecutive nights of review finding nothing new. Tonight's
+  independent read-through (delegated to a fresh background-context fork,
+  primed with the full verbatim Open Items list as in prior nights)
+  surfaced one genuinely new, narrowly-scoped bug: `add_doc_to_repo`
+  (~line 548) removed the existing entry and appended the replacement at
+  the end whenever a document was re-uploaded or re-fetched under the same
+  name, instead of updating it in place. Concretely: a repo with A, B, C
+  added in that order becomes B, C, A after re-uploading A — visible in
+  the Document Repository list itself, and silently changes the order
+  documents are concatenated into AI prompts wherever a panel's
+  doc-selection multiselect defaults to the full repo in list order (e.g.
+  Business Glossary's "Build glossary from:", ~line 2060-2072). Verified
+  the bug directly by reading the function and tracing that downstream
+  default before fixing it, and verified the fix with an isolated
+  behavioral test (add A/B/C, re-add A with new text, confirm order stays
+  [A, B, C] and A's text updates) — not just a compile check. Judged safe
+  to fix directly rather than flag: replacing in place has no UX or
+  product ambiguity (a genuinely new name still appends as before; only
+  the same-name "update" path changed), unlike the already-open
+  case-sensitive-dedup items, which are a different question (whether two
+  *different*-cased names should collide at all).
+- The review fork also re-checked a wide range of other candidate areas
+  (`.pptx` image-extraction ordering, PDF decrypt-flag truthiness, NaN
+  handling in `data_editor` exports, the SSRF guard, chat history
+  windowing/role-alternation, the zip-bomb guard, RTM fuzzy-matching,
+  `fetch_url_text` redirect handling, csv/txt encoding fallbacks, button
+  copy) and found nothing else new — each either behaved correctly or
+  matched an already-tracked Open Items entry.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` via a direct AST scan (`ast.walk` over
+  `Import`/`ImportFrom` nodes): all ten third-party imports map to a pin
+  and vice versa; `auth`/`theme` are local modules, the rest is stdlib. No
+  drift.
+- Read `evals/LEARNED.md`: still "No entries yet" — no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the same stale
+  2026-08-18 report; `.github/workflows/nightly_evals.yml`'s `schedule`
+  trigger remains disabled (`workflow_dispatch` only, per the 2026-10-15
+  decision, confirmed by reading the workflow file directly tonight). The
+  already-open "Nightly Evals GitHub Action has been failing" item is
+  unaffected and remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (outside
+  the repo working directory, deleted after use) and ran both `python3 -m
+  py_compile synergyai_app.py` and `python3 evals/run_evals.py --dry-run`
+  against the real pinned packages myself, both before and after the fix
+  — all passed clean (7 fixtures loaded), no API calls made.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed tonight beyond the one-line definitions already visible in
+  `synergyai_app.py`; the review fork was explicitly instructed not to
+  open `auth.py`/`db.py` and confirmed it didn't. No edits were made to
+  either file or to `AUTH_ENABLED`/`check_access()`.
+
+No new items added to the Open items list tonight — the one new finding
+was fixed directly rather than left open.
+
+---
+
 ## 2026-11-10
 
 **Committed**
