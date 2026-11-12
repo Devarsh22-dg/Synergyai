@@ -763,6 +763,60 @@ only once it is actually decided.
 
 ---
 
+## 2026-11-12
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` has changed only once since the
+  `dc2b2a5` (2026-11-06) baseline: last night's `d2356ef`
+  (`add_doc_to_repo` reorder-on-replace fix). Delegated a full independent
+  read-through of the current 2803-line file to a fresh background-context
+  fork, primed with the complete, verbatim Open Items list and instructed
+  not to re-raise anything already tracked there. It read the file
+  end-to-end (config/schemas, file parsing/extraction, API helpers, export
+  builders, all six BA tabs, the PM/PgM placeholders, main nav/chat) and
+  found nothing new — every candidate it flagged for itself (CSV formula
+  injection at the four `to_csv` sites, filename markdown-escaping,
+  discarded pre-`st.rerun()` success messages, additive dashboard counters,
+  case-sensitive dedup, unsaved `data_editor` edits, `pm_module`'s dead
+  dropdown) already matches an existing entry at the same call sites.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` myself via a direct AST scan (`ast.walk`
+  over `Import`/`ImportFrom` nodes): all ten third-party imports (`PIL`,
+  `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`, `pypdf`,
+  `requests`, `streamlit`) map to a pin and vice versa. `auth`/`theme` are
+  local modules; the rest is stdlib. No drift.
+- Grepped the whole repo for `otp_email`: the only occurrences are inside
+  `MAINTENANCE_LOG.md`'s own historical log text — no stale reference in
+  any code file.
+- Read `evals/LEARNED.md`: still "No entries yet" — no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the same stale
+  2026-08-18 report; confirmed `.github/workflows/nightly_evals.yml`'s
+  `schedule` trigger remains disabled (`workflow_dispatch` only, per the
+  2026-10-15 decision, read directly from the workflow file tonight). The
+  already-open "Nightly Evals GitHub Action has been failing" item is
+  unaffected and remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (outside
+  the repo working directory, deleted after use) and ran both `python3 -m
+  py_compile synergyai_app.py` and `python3 evals/run_evals.py --dry-run`
+  against the real pinned packages myself — both passed clean (7 fixtures
+  loaded), no API calls made.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or analyzed tonight beyond the one-line definitions already visible in
+  `synergyai_app.py`; the review fork was explicitly instructed not to
+  open `auth.py`/`db.py` and confirmed it didn't. No edits were made to
+  either file or to `AUTH_ENABLED`/`check_access()`.
+
+No new items added to the Open items list tonight — nothing surfaced that
+wasn't already tracked above.
+
+---
+
 ## 2026-11-11
 
 **Committed**
