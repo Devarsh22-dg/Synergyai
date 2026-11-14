@@ -761,6 +761,77 @@ only once it is actually decided.
   against and accepting (or avoiding) that content change is a product
   decision, not a mechanical patch, so left open rather than guessed at.
 
+- **A likely seventh call site of the already-open "six `generate_*`
+  functions give no UI feedback when the AI validly returns an empty
+  result" item** (raised 2026-11-14, extending the 2026-08-30 item;
+  moderate confidence, worth a human glance). `generate_document()`
+  (`synergyai_app.py` line 1480) returns `call_text(...)`'s result
+  directly, which can be `""` with no signal distinguishing "the model
+  validly returned no text" from any other no-op. Its caller's `if
+  draft:` (~line 2404, the BRD/FRD/Use Cases branch) treats an empty
+  string the same as nothing happened — no counter increment, no error,
+  no stale-draft clearing — the identical pattern already tracked for
+  the other six `generate_*` functions, just not named in that item's
+  enumeration. Same fix-shape and same "needs a wording decision" reason
+  the original item is open, so not fixed directly tonight; flagging as
+  a probable missing call site for that same item rather than a new one.
+
+---
+
+## 2026-11-14
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` has been unchanged since
+  `d2356ef` (2026-11-11) for three consecutive nights now. Delegated an
+  independent end-to-end read-through to a fresh background-context
+  fork, primed with the complete, verbatim Open Items list and
+  instructed not to re-raise anything already tracked there, not to
+  open `auth.py`/`db.py`, and to only flag something as "safe to fix
+  tonight" if it was small, mechanical, and carried no UX/product
+  judgment call. It found nothing safe to fix directly — every
+  candidate it considered (CSV formula injection at the four `to_csv`
+  sites, filename/text markdown-escaping, case-sensitive dedup at two
+  layers, unsaved `data_editor` edits on four tables, discarded
+  pre-`st.rerun()` success messages, the `pm_module` dead dropdown,
+  2,000-char silent truncation defaults, the PDF decompression-bomb
+  gap, the SSRF guard's two unblocked ranges, additive dashboard
+  counters, stale-result-after-failure rendering) already matches an
+  existing Open Items entry at the same mechanism/call site.
+- It did surface one moderate-confidence candidate, added to Open Items
+  above: `generate_document()` (line 1480) likely a missing seventh call
+  site of the already-open "six `generate_*` functions give no UI
+  feedback on a valid empty result" item (2026-08-30) — verified directly
+  against the code (lines 1480, 2402-2407) before adding, not taken on
+  the fork's word alone.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` myself via a direct AST scan
+  (`ast.walk` over `Import`/`ImportFrom` nodes): all ten third-party
+  imports (`PIL`, `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`,
+  `pptx`, `pypdf`, `requests`, `streamlit`) map 1:1 to pins; `auth`/
+  `theme` are local modules, the rest is stdlib. No drift.
+- `evals/LEARNED.md` still has no entries — no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the stale
+  2026-08-18 report; the already-open "Nightly Evals GitHub Action has
+  been failing" item is unaffected and remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (outside
+  the repo working directory, deleted after use) and ran both
+  `python3 -m py_compile synergyai_app.py` and `python3
+  evals/run_evals.py --dry-run` against the real pinned packages myself
+  — both passed clean (7 fixtures loaded), no API calls made.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  opened or edited tonight; the review fork was explicitly instructed
+  not to open `auth.py`/`db.py` and confirmed it didn't.
+
+One new item added to the Open items list tonight (the likely seventh
+`generate_document()` call site above); nothing else surfaced that wasn't
+already tracked.
+
 ---
 
 ## 2026-11-13
