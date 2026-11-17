@@ -778,6 +778,67 @@ only once it is actually decided.
 
 ---
 
+## 2026-11-17
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` has been unchanged since
+  `d2356ef` (2026-11-11) for six consecutive nights now. Delegated an
+  independent end-to-end read-through (all 2803 lines) to a fresh
+  background-context fork, primed with the complete, verbatim Open Items
+  list and instructed not to re-raise anything already tracked there, not
+  to open `auth.py`/`db.py`, and to only propose a fix if it was small,
+  mechanical, and carried no UX/product judgment call. It made no edits;
+  every real gap it noticed while reading (CSV formula injection at the
+  four `to_csv` sites, dashboard counter semantics, the new-project-form
+  case-sensitive dedup + `clear_on_submit` description loss, the three
+  uncapped `text_input` fields, stale-result-after-failure rendering,
+  missing success confirmations on several panels, unsaved `data_editor`
+  edits on the Glossary/RTM tables, the PDF decompression-bomb gap, the
+  `pm_module` dead dropdown, the docx/pptx header-footer-master-layout
+  gaps, and the `.txt`/`.csv` binary-content fallback) already matched an
+  existing Open Items entry at the same mechanism/call site.
+- One borderline, low-confidence observation surfaced, deliberately not
+  added as a new Open Items entry: `st.chat_input(...)` (~line 2783) is
+  the only free-text input in the file with no `max_chars`, unlike every
+  `text_area`/`text_input`. Picking a cap isn't mechanical here, though —
+  it's really the same question as the already-open "individual chat
+  messages are silently truncated for the API with no on-screen trace"
+  item (2026-09-10): capping input at `MAX_CHARS` (15,000) wouldn't
+  prevent that silent truncation (which kicks in at 6,000 chars), and
+  capping at exactly `MAX_CHAT_MESSAGE_CHARS` would itself be part of
+  that item's eventual decision. Noting here so whoever resolves the
+  2026-09-10 item knows to consider the input widget's cap too, rather
+  than opening a separate entry for the same underlying tradeoff.
+- `evals/LEARNED.md` still has no entries — no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the stale
+  2026-08-18 report; the already-open "Nightly Evals GitHub Action has
+  been failing" item is unaffected and remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (outside
+  the repo working directory) and ran both `python3 -m py_compile
+  synergyai_app.py` and `python3 evals/run_evals.py --dry-run` against the
+  real pinned packages — both passed clean (7 fixtures loaded), no API
+  calls made. Independently re-verified `requirements.txt` against every
+  third-party import in `synergyai_app.py` via a direct AST scan: all ten
+  third-party imports (`PIL`, `anthropic`, `bs4`, `docx`, `openpyxl`,
+  `pandas`, `pptx`, `pypdf`, `requests`, `streamlit`) map 1:1 to pins;
+  `auth`/`theme` are local modules, the rest is stdlib. No drift.
+  `streamlit-authenticator` is pinned but not directly imported in
+  `synergyai_app.py` (pulled in lazily inside `auth.py`, out of scope
+  for this routine) — expected, not drift.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not
+  opened or edited by this session.
+
+No new items added to the Open items list tonight — nothing surfaced that
+wasn't already tracked above.
+
+---
+
 ## 2026-11-16
 
 **Committed**
