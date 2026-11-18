@@ -23,12 +23,18 @@ reasoning trail stays intact.
 Carried forward until resolved. The routine adds to this list; remove an item
 only once it is actually decided.
 
-- **ScopeBot cannot act on requests** (raised 2026-08-27). ScopeBot is a plain
-  text call (`call_chat`, no tools) whose prompt tells it to "steer back to how
-  ScopeForge's modules might help." Asked to run a gap analysis or generate
-  stories, it explains how rather than doing it. Making it act means giving it
-  tool access to the app's own functions — a real design change, not a nightly
-  fix, so it needs a decision on scope before anything is built.
+- **ScopeBot's tool-calling is not yet verified against the live API** (raised
+  2026-11-18, replacing the closed "ScopeBot cannot act on requests" item).
+  The planner, queue executor, chaining, validation and failure handling are
+  unit-tested with injected fakes (15 cases) and the app/agent contract is
+  tested (9 cases), but no round trip through the real model has been run:
+  there is no `ANTHROPIC_API_KEY` on the development machine, and the
+  production key could not be exercised without logging in to the deployed
+  app. So what the model actually *plans* for a given phrasing — whether it
+  queues two chained jobs for "update the BRD and write stories for it",
+  whether it asks rather than guesses on a vague request — is unproven.
+  Needs one session against a real key to confirm, and the planner prompt in
+  `agent.py` likely needs tuning once its real behaviour is observable.
 
 - **`call_structured_multimodal` (image descriptions) doesn't warn on a
   truncated response** (raised 2026-08-28). `call_text` and `call_chat` were
@@ -770,6 +776,37 @@ only once it is actually decided.
   a probable missing call site for that same item rather than a new one.
 
 ---
+
+## 2026-11-18 (third entry — interactive session, ScopeBot can now act)
+
+**Committed**
+
+- `df37eb6` Let ScopeBot queue and run jobs; draft project description from documents
+
+**Worth knowing**
+
+- Closes the oldest open item, "ScopeBot cannot act on requests" (raised
+  2026-08-27), which had been waiting 83 days on a scope decision. ScopeBot
+  now has three tools: `queue_jobs` (plan an ordered run across Elicitation,
+  Documentation Generator, Story/Test Case creation, Glossary and
+  Prioritization), `ask_clarifying_question`, and `update_project_field`.
+- The planner and executor live in a new `agent.py` that imports nothing from
+  `synergyai_app` and knows nothing about Streamlit — the app passes its
+  generator functions in as a `deps` dict. That is what makes the queue
+  logic unit-testable with fakes and no API key, which matters here because
+  there is no key on the development machine.
+- Multi-step chaining is the point of the design: a job with
+  `input_source="previous_step"` consumes the prior job's output, so "update
+  the BRD from the new requirements, then write stories for that" runs as one
+  connected queue rather than two jobs that both read the original repository
+  text. Verified by assertion, not by eye — the test checks the stories
+  generator actually received the BRD's output string.
+- Plans are shown for confirmation before running, because every generator
+  overwrites that module's previous result. A queue stops at the first failed
+  step rather than running later steps against missing input.
+- **Not verified: the live model round trip.** See the replacement open item
+  above. All 24 tests use injected fakes; what the model actually plans for a
+  given phrasing is still unobserved.
 
 ## 2026-11-18 (second entry — interactive session, not the nightly routine)
 

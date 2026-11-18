@@ -9,6 +9,7 @@ import zipfile
 from urllib.parse import urlparse, urljoin
 import requests
 from bs4 import BeautifulSoup
+import agent
 import streamlit as st
 import pandas as pd
 import anthropic
@@ -504,6 +505,7 @@ CHANGE_IMPACT_SCHEMA = {
 def default_project():
     return {
         "description": "",
+        "desc_version": 0,   # bumps the description widget key after an AI draft
         "client": "",
         "status": "Planning",
         "documents": [],          # list of {"name","text","ext","added_at","char_count"}
@@ -635,6 +637,35 @@ def call_chat(system, messages, max_tokens=800, model=None):
     except Exception as e:
         st.error(f"AI request failed: {e}")
         return None
+
+
+def call_chat_with_tools(system, messages, tools, max_tokens=2000, model=None):
+    """Chat turn that may come back as either prose or a tool call.
+
+    Returns (text, tool_uses) where tool_uses is a list of {"name", "input"}.
+    ScopeBot uses this to decide between answering a question and actually
+    queueing work — see agent.py. Returns (None, []) on failure so the caller
+    can distinguish an API error from a deliberate empty reply.
+    """
+    client = get_client()
+    try:
+        resp = client.messages.create(
+            model=model or current_model(),
+            max_tokens=max_tokens,
+            system=system,
+            messages=messages,
+            tools=tools,
+        )
+        text = "".join(b.text for b in resp.content if b.type == "text")
+        tool_uses = [
+            {"name": b.name, "input": b.input} for b in resp.content if b.type == "tool_use"
+        ]
+        if resp.stop_reason == "max_tokens" and not tool_uses:
+            st.warning("ScopeBot's reply was cut off before it finished — try asking for a shorter answer.")
+        return text, tool_uses
+    except Exception as e:
+        st.error(f"AI request failed: {e}")
+        return None, []
 
 
 def call_structured(system, user_prompt, tool_name, tool_description, schema, max_tokens=8000, model=None):
@@ -1806,6 +1837,75 @@ def _recent_chat_messages(history):
     return trimmed
 
 
+def project_repository_text(proj):
+    """The project's source content, as queued jobs should see it.
+
+    Prefers the full repository because a queued job has no tab-level document
+    picker to narrow it; falls back to the last Elicitation analysis text when
+    the repository is empty, so ScopeBot still works on a project where content
+    was pasted rather than uploaded.
+    """
+    parts = [f"--- {d['name']} ---\n{d['text']}" for d in proj.get("documents", [])]
+    if parts:
+        return "\n\n".join(parts)
+    return proj.get("extracted_text", "")
+
+
+def agent_deps():
+    """Generator functions handed to agent.run_jobs.
+
+    Passed in rather than imported by agent.py so that module stays free of
+    Streamlit and testable without an API key.
+    """
+    return {
+        "analyze_gaps": analyze_gaps,
+        "generate_document": generate_document,
+        "generate_data_dictionary": generate_data_dictionary,
+        "generate_asis_tobe": generate_asis_tobe,
+        "generate_stories": generate_stories,
+        "generate_test_cases": generate_test_cases,
+        "generate_glossary": generate_glossary,
+        "generate_prioritization": generate_prioritization,
+    }
+
+
+PROJECT_DESCRIPTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "description": {
+            "type": "string",
+            "description": (
+                "A 2-4 sentence project description: what is being built or changed, for whom, "
+                "and why. Ground every claim in the source documents — if scope or purpose is "
+                "not stated, say so rather than inventing it."
+            ),
+        },
+        "client": {
+            "type": "string",
+            "description": "The client or sponsoring organisation if the documents name one, otherwise an empty string.",
+        },
+    },
+    "required": ["description", "client"],
+}
+
+
+def suggest_project_description(context_text):
+    """Drafts a project description from the repository documents (BRD etc.)."""
+    context_text, was_truncated = truncate(context_text)
+    if was_truncated:
+        st.caption(f"Source content was long — using the first {MAX_CHARS:,} characters.")
+    system = (
+        "You are a senior business analyst writing the summary line for a project record. "
+        "Read the supplied project documents and describe what this project actually is. "
+        "Be concrete and factual; do not pad with consulting filler, and do not state scope, "
+        "dates or sponsors the documents don't support."
+    ) + FORMATTING_GUIDANCE
+    return call_structured(
+        system, f"Project documents:\n\n{context_text}", "submit_project_description",
+        "Submit the drafted project description.", PROJECT_DESCRIPTION_SCHEMA, max_tokens=1000,
+    )
+
+
 def chat_with_bot(history):
     proj = get_project()
     proj_name = get_current_project_name()
@@ -1818,8 +1918,23 @@ def chat_with_bot(history):
         if len(docs) > 10:
             doc_names += f" (+{len(docs) - 10} more)"
         context_note += f" Documents in this project's repository: {doc_names}."
-    return call_chat(CHATBOT_SYSTEM_PROMPT + context_note,
-                     _recent_chat_messages(history), max_tokens=800)
+    # What the model needs to plan sensibly: whether there is anything to work
+    # from, and what already exists that a job would overwrite.
+    doc_count = len(proj.get("documents", []))
+    context_note += (
+        f"\n\nProject state: {doc_count} document(s) in the repository"
+        f"{'' if doc_count else ' (so jobs have no uploaded source content to read)'}."
+        f" Gap analysis: {'present' if proj.get('gap_analysis') else 'none yet'}."
+        f" User stories: {len(proj.get('stories', []))}."
+        f" Test cases: {len(proj.get('test_cases', []))}."
+        f" Last document drafted: {proj.get('last_doc_type') or 'none'}."
+    )
+    return call_chat_with_tools(
+        agent.AGENT_SYSTEM_PROMPT + context_note,
+        _recent_chat_messages(history),
+        agent.AGENT_TOOLS,
+        max_tokens=2000,
+    )
 
 
 # --- Role-Specific Functions ---
@@ -1899,9 +2014,28 @@ def ba_module():
             )
 
         proj["description"] = st.text_area(
-            "Project Description / Background", value=proj.get("description", ""), height=120, key=f"desc_{cp}",
+            "Project Description / Background", value=proj.get("description", ""), height=120,
+            key=f"desc_{cp}_{proj.get('desc_version', 0)}",
             max_chars=MAX_CHARS,
         )
+
+        if proj.get("documents"):
+            if st.button("Draft from documents", key=f"desc_from_docs_{cp}",
+                         help="Read the project's uploaded documents and draft the description from them."):
+                with st.spinner("Reading the project's documents..."):
+                    drafted = suggest_project_description(project_repository_text(proj))
+                if drafted:
+                    proj["description"] = drafted.get("description", "")
+                    if drafted.get("client") and not proj.get("client"):
+                        proj["client"] = drafted["client"]
+                    # The text area is keyed to this counter so it re-reads the
+                    # new value: Streamlit keeps a widget's own state once it has
+                    # rendered, so without a new key the box would keep showing
+                    # the old text while proj["description"] held the new one.
+                    proj["desc_version"] = proj.get("desc_version", 0) + 1
+                    st.rerun()
+        else:
+            st.caption("Add documents below, then you can draft this description from them.")
 
         st.markdown("---")
         st.markdown("#### Create a New Project")
@@ -2780,7 +2914,63 @@ if __name__ == "__main__":
     for msg in st.session_state["chat_history"]:
         st.chat_message(msg["role"]).write(msg["content"])
 
-    user_query = st.chat_input("Ask ScopeBot a question about requirements, JIRA sync, or best practices...")
+    # A queue the model proposed but the user hasn't confirmed yet. Held in
+    # session state so it survives the rerun between proposing and confirming.
+    pending = st.session_state.get("pending_jobs")
+    if pending:
+        st.markdown("**ScopeBot wants to run these steps:**")
+        for i, job in enumerate(pending["jobs"], start=1):
+            st.markdown(f"{i}. {html.escape(agent.describe_job(job))}")
+        st.caption(
+            "Each step overwrites that module's current result for this project. "
+            "Steps run in order, and a step marked as using the previous step's output "
+            "waits for it."
+        )
+        run_col, cancel_col = st.columns(2)
+        with run_col:
+            confirm = st.button("Run these steps", key="confirm_jobs", type="primary")
+        with cancel_col:
+            cancel = st.button("Cancel", key="cancel_jobs")
+
+        if cancel:
+            st.session_state.pop("pending_jobs", None)
+            st.session_state["chat_history"].append(
+                {"role": "assistant", "content": "Cancelled — nothing was run."}
+            )
+            st.rerun()
+
+        if confirm:
+            jobs = pending["jobs"]
+            proj_now = get_project()
+            repo_text = project_repository_text(proj_now)
+            progress = st.empty()
+
+            def _on_progress(i, total, label):
+                progress.info(f"Step {i} of {total}: {label}")
+
+            results, errors = agent.run_jobs(
+                jobs, proj_now, agent_deps(), repo_text, on_progress=_on_progress
+            )
+            progress.empty()
+
+            lines = []
+            if results:
+                lines.append("Done:")
+                lines.extend(f"- {r}" for r in results)
+            if errors:
+                lines.append("Stopped early:")
+                lines.extend(f"- {e}" for e in errors)
+            if not results and not errors:
+                lines.append("Nothing ran.")
+            lines.append("\nOpen the matching tab above to review and edit the output.")
+
+            st.session_state.pop("pending_jobs", None)
+            st.session_state["chat_history"].append(
+                {"role": "assistant", "content": "\n".join(lines)}
+            )
+            st.rerun()
+
+    user_query = st.chat_input("Ask a question, or tell ScopeBot what to generate...")
 
     if user_query:
         st.session_state["chat_history"].append({"role": "user", "content": user_query})
@@ -2788,10 +2978,47 @@ if __name__ == "__main__":
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                reply = chat_with_bot(st.session_state["chat_history"])
-            failed = not reply
+                reply, tool_uses = chat_with_bot(st.session_state["chat_history"])
+
+            failed = reply is None and not tool_uses
+            queued = False
+
+            for call in tool_uses:
+                if call["name"] == "queue_jobs":
+                    jobs = call["input"].get("jobs", [])
+                    problems = agent.validate_jobs(jobs)
+                    if problems:
+                        # The model proposed something malformed. Say so plainly
+                        # rather than running a partial or wrong queue.
+                        reply = "I couldn't build a valid plan for that:\n" + "\n".join(
+                            f"- {p}" for p in problems
+                        )
+                    else:
+                        st.session_state["pending_jobs"] = {"jobs": jobs}
+                        reply = (call["input"].get("summary") or "Here's what I'd run.") + \
+                            "\n\nConfirm below to run it."
+                        queued = True
+                elif call["name"] == "ask_clarifying_question":
+                    q = call["input"].get("question", "")
+                    why = call["input"].get("why", "")
+                    reply = q + (f"\n\n_{why}_" if why else "")
+                elif call["name"] == "update_project_field":
+                    field = call["input"].get("field")
+                    value = call["input"].get("value", "")
+                    proj_now = get_project()
+                    if field in agent.EDITABLE_FIELDS:
+                        if field == "status" and value not in PROJECT_STATUSES:
+                            reply = f"'{value}' isn't a valid status. Choose from: {', '.join(PROJECT_STATUSES)}."
+                        else:
+                            proj_now[field] = value
+                            reply = f"Updated the project {field}."
+                    else:
+                        reply = f"I can't update '{field}'."
+
             if failed:
                 reply = "Sorry, I couldn't process that — please try again."
+            elif not reply:
+                reply = "I didn't have anything to add there."
             st.write(reply)
 
         # Stays visible on screen like any other turn, but is_error keeps it
@@ -2801,3 +3028,7 @@ if __name__ == "__main__":
         if failed:
             entry["is_error"] = True
         st.session_state["chat_history"].append(entry)
+        if queued:
+            # Render the confirmation block immediately rather than making the
+            # user send another message to see it.
+            st.rerun()
