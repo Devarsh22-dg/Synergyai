@@ -30,7 +30,7 @@ USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,20}$")
 # exist in ba_module() — don't advertise the PM/PgM modules here, they're
 # still placeholders.
 CAPABILITIES = [
-    ("Elicitation Analysis", "Upload notes, transcripts, or documents and get ambiguities, missing NFRs, and stakeholder conflicts flagged with a risk score."),
+    ("Elicitation Analysis", "Upload notes, transcripts, or documents and get ambiguities, missing NFRs, and stakeholder conflicts surfaced as a list of possible gaps."),
     ("Documentation Generator", "First-draft BRDs, FRDs, Use Cases, Data Dictionaries, and As-Is / To-Be process maps, exportable to Word, Excel, or Visio."),
     ("Agile Story & Test Cases", "Turn requirements into user stories with Gherkin acceptance criteria, then derive test cases from them. Exports to Jira and Azure DevOps."),
     ("Meeting Actionizer", "Raw transcript in, structured minutes out: decisions, action items, owners, and due dates."),
@@ -79,6 +79,10 @@ def _build_authenticator(warn_missing_key=True):
 
 def _render_signup():
     st.subheader("Create an account")
+    # Shown after the post-signup rerun below, not inline at creation time —
+    # see the comment there for why the rerun is required.
+    if st.session_state.pop("_signup_success", False):
+        st.success("Account created — switch to the Log In tab and sign in with your new credentials.")
     with st.form("signup_form"):
         username = st.text_input("Username", key="signup_username")
         email = st.text_input("Email", key="signup_email")
@@ -133,7 +137,16 @@ def _render_signup():
             return
 
     db.mark_email_verified(user_id)
-    st.success("Account created — switch to the Log In tab and sign in with your new credentials.")
+    # Rerun rather than just showing the message inline. st.tabs renders every
+    # tab in one script run, in declaration order, so the Log In tab above has
+    # already evaluated get_all_verified_users() against the pre-signup
+    # database by the time this runs. Without a rerun the very first user to
+    # sign up switches to Log In and is told "No accounts exist yet" —
+    # contradicting the success message they just received — until they
+    # manually refresh. That is not an edge case: Streamlit Cloud wipes the
+    # ephemeral SQLite file on every redeploy, so there is always a first user.
+    st.session_state["_signup_success"] = True
+    st.rerun()
 
 
 def _render_showcase():
