@@ -778,6 +778,56 @@ only once it is actually decided.
 
 ---
 
+## 2026-11-18
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` has been unchanged since
+  `d2356ef` (2026-11-11) for seven consecutive nights now. Delegated an
+  independent end-to-end read-through (all ~2803 lines) to a fresh
+  background-context fork, primed with the complete, verbatim Open Items
+  list and instructed not to re-raise anything already tracked there, not
+  to open `auth.py`/`db.py`, and to only propose a fix if it was small,
+  mechanical, and carried no UX/product judgment call. It made no edits;
+  every rough edge it noticed (the 2,000-char silent truncation defaults,
+  the four `to_csv` CSV-injection sites, raw-exception-text sites
+  including `call_structured_multimodal`'s `st.warning`, missing success
+  confirmations on Glossary/Prioritization/Workshop Prep/RTM, the three
+  uncapped `text_input` fields, case-sensitive dedup at both the
+  new-project-form and `add_doc_to_repo` layers, unsaved `data_editor`
+  edits across the Story/Test Case/Glossary/RTM tables, the `pm_module`
+  dead dropdown, and `st.chat_input`'s missing `max_chars`) already
+  matched an existing Open Items entry at the same mechanism/call site.
+- Independently re-verified `requirements.txt` against every third-party
+  import in `synergyai_app.py` myself via a direct AST scan (`ast.walk`
+  over `Import`/`ImportFrom` nodes): all ten third-party imports (`PIL`,
+  `anthropic`, `bs4`, `docx`, `openpyxl`, `pandas`, `pptx`, `pypdf`,
+  `requests`, `streamlit`) map 1:1 to pins; `auth`/`theme` are local
+  modules, the rest is stdlib. No drift. The fork independently confirmed
+  the same via its own AST scan.
+- `evals/LEARNED.md` still has no entries — no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the stale
+  2026-08-18 report; the already-open "Nightly Evals GitHub Action has
+  been failing" item is unaffected and remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (outside
+  the repo working directory) and ran both `python3 -m py_compile
+  synergyai_app.py` and `python3 evals/run_evals.py --dry-run` against the
+  real pinned packages myself — both passed clean (7 fixtures loaded), no
+  API calls made.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or edited by this session; the review fork was explicitly instructed
+  not to open `auth.py`/`db.py` and confirmed it didn't.
+
+No new items added to the Open items list tonight — nothing surfaced that
+wasn't already tracked above.
+
+---
+
 ## 2026-11-17
 
 **Committed**
