@@ -30,13 +30,6 @@ only once it is actually decided.
   tool access to the app's own functions — a real design change, not a nightly
   fix, so it needs a decision on scope before anything is built.
 
-- **auth.py's CAPABILITIES list references a removed "risk score" field**
-  (raised 2026-08-28). Line 33's Elicitation Analysis description tells new
-  users results come "flagged with a risk score," but risk score was removed
-  from the gap-analysis schema on 2026-08-27 and replaced with a gap count
-  (see the 2026-08-27 entry below). auth.py is permanently off-limits to the
-  automated routine, so this stale copy needs a human edit.
-
 - **`call_structured_multimodal` (image descriptions) doesn't warn on a
   truncated response** (raised 2026-08-28). `call_text` and `call_chat` were
   brought in line with `call_structured`'s truncation check tonight; this
@@ -777,6 +770,32 @@ only once it is actually decided.
   a probable missing call site for that same item rather than a new one.
 
 ---
+
+## 2026-11-18 (second entry — interactive session, not the nightly routine)
+
+**Committed**
+
+- `f080a95` Fix first-user signup dead end; correct stale risk-score copy
+
+**Worth knowing**
+
+- Found by opening the live deployed app and walking it, then reproducing
+  against a clean local database. The signup dead end is the more serious
+  of the two: `st.tabs` renders every tab in one script run, in declaration
+  order, so the Log In tab read the database *before* the Sign Up tab wrote
+  to it. The first user to register was told "No accounts exist yet" on one
+  tab while the adjacent tab said "Account created" — only a manual refresh
+  cleared it. Because Streamlit Cloud wipes the ephemeral SQLite file on
+  every redeploy and this routine commits most nights, there is almost
+  always a first user hitting exactly this. Fixed by rerunning after
+  account creation, with the success message carried across in session
+  state.
+- **Closed the open item** "auth.py's CAPABILITIES list references a removed
+  'risk score' field" (raised 2026-08-28), removed from the list above. It
+  sat ~82 days purely because `auth.py` is off-limits to the nightly
+  routine, so it could only ever be fixed by hand — worth noting as a
+  structural gap rather than an oversight: items scoped to the permanently
+  off-limits files accumulate until someone looks at them deliberately.
 
 ## 2026-11-18
 
