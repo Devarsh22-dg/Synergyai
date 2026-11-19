@@ -2917,6 +2917,19 @@ if __name__ == "__main__":
     # A queue the model proposed but the user hasn't confirmed yet. Held in
     # session state so it survives the rerun between proposing and confirming.
     pending = st.session_state.get("pending_jobs")
+    if pending and pending.get("project") != get_current_project_name():
+        # The sidebar's project selector is independent of this chat flow, so a
+        # plan proposed for one project can still be sitting here after the user
+        # switches to another. Discard it rather than run it against the wrong
+        # project's documents and state.
+        st.session_state.pop("pending_jobs", None)
+        st.session_state["chat_history"].append(
+            {
+                "role": "assistant",
+                "content": "The selected project changed before this plan was confirmed, so it was discarded — ask again to plan for the current project.",
+            }
+        )
+        st.rerun()
     if pending:
         st.markdown("**ScopeBot wants to run these steps:**")
         for i, job in enumerate(pending["jobs"], start=1):
@@ -2994,7 +3007,10 @@ if __name__ == "__main__":
                             f"- {p}" for p in problems
                         )
                     else:
-                        st.session_state["pending_jobs"] = {"jobs": jobs}
+                        st.session_state["pending_jobs"] = {
+                            "jobs": jobs,
+                            "project": get_current_project_name(),
+                        }
                         reply = (call["input"].get("summary") or "Here's what I'd run.") + \
                             "\n\nConfirm below to run it."
                         queued = True
