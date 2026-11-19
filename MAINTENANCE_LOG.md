@@ -775,6 +775,100 @@ only once it is actually decided.
   the original item is open, so not fixed directly tonight; flagging as
   a probable missing call site for that same item rather than a new one.
 
+- **ScopeBot's job executor silently drops the "previous step" chaining
+  for three of its six job types, confirmed by direct repro with fakes,
+  not speculation** (raised 2026-11-19). `agent.run_jobs()` tracks a
+  `previous_output` variable that a later job's `input_source =
+  "previous_step"` reads (~line 232-235). Only `generate_document` and
+  `generate_stories` actually set it to their own result. `generate_glossary`
+  (~line 312-320) and `generate_prioritization` (~line 322-329) never assign
+  it at all; `analyze_gaps` (~line 245) assigns it to `source_text` — the
+  text that was just fed *in* to the analysis, not the analysis's own
+  findings. Reproduced directly: a two-job queue
+  `[generate_glossary(repository), generate_document(BRD, previous_step)]`
+  run against fakes with `run_jobs()` produces a BRD drafted from the raw
+  repository text, silently ignoring the glossary step entirely — `results`
+  shows both steps as having succeeded, with nothing indicating the
+  requested chaining didn't happen (the `previous_output` guard at line 232
+  is `and previous_output:`, so a falsy/stale value fails open to
+  `repository_text` rather than raising anything). This is distinct from
+  the already-open "ScopeBot's tool-calling is not yet verified against the
+  live API" item above: that one is about what the *model* decides to plan;
+  this is a bug in the *executor* itself, present regardless of what gets
+  planned, and demonstrated with no model involved. `generate_test_cases`
+  (~line 295-310) has the same non-assignment, but that one is explained by
+  an in-code comment (it deliberately chains through `proj["stories"]`
+  instead) — not clearly a bug, just unverified whether a *following* step
+  chaining off test-case output specifically is ever a case users hit.
+  Not fixed tonight: the mechanical gap (missing assignments) is obvious,
+  but the *right* text to feed forward for a glossary or a prioritization
+  result is a real design choice (full term list? a summary? how is it
+  worded so the next generator's prompt makes sense of it?), the same kind
+  of judgment call this routine leaves for Devarsh elsewhere. Given this
+  sits inside the same chaining logic the 2026-11-18 session flagged as
+  needing tuning once watched against a real key, recommend deciding this
+  alongside that live-verification pass rather than patching it blind.
+
+---
+
+## 2026-11-19
+
+**Committed**
+
+- `d32df9f` Discard ScopeBot's pending job queue if the project changes
+  before confirmation
+
+**Worth knowing**
+
+- Pulled last night's large interactive-session commit (`f6b1219`, ScopeBot
+  tool-calling + "Draft from documents") for the first time tonight; it
+  hadn't been reviewed by this routine before. `auth.py` was also touched
+  in that session's second entry (`f080a95`) — confirmed via `git show
+  --stat` that tonight's own diff touches neither `auth.py` nor `db.py`;
+  those commits were made by the interactive session, not this routine, and
+  are out of scope here regardless of who made them.
+- Found and fixed one concrete, reproducible bug in the new ScopeBot
+  confirm/cancel flow: `st.session_state["pending_jobs"]` (`synergyai_app.py`
+  ~line 2919) held a proposed job queue with no record of which project it
+  was proposed for, and the sidebar's "Select Project" dropdown (~line 2881)
+  is independent of that chat flow — bound to its own `key="current_project"`
+  so it reruns the script the instant it changes, before the user ever
+  touches the pending plan. Proposing a plan for Project A, switching to
+  Project B in the sidebar, then clicking "Run these steps" ran the queue
+  against Project B's documents and overwrote Project B's own state with
+  results planned from reading Project A's content — confirmed by reading
+  the control flow, not reproduced against a live model (no API key here),
+  but the project mismatch itself needed no model call to verify. Fixed by
+  recording the project name alongside the queued jobs when they're proposed
+  and discarding the pending plan (with a chat notice, not a silent drop) if
+  the current project no longer matches when the confirmation block renders.
+  Small, self-contained, fails closed (discards rather than guesses), and
+  doesn't touch the planning/execution logic itself.
+- Found a second, more involved defect in `agent.py`'s job executor — three
+  of six job types don't correctly feed their output into a following
+  "previous step" job, confirmed by a direct repro with fakes (see the new
+  Open Items entry above for the full writeup). Left open rather than fixed:
+  closing it properly means choosing what text represents a glossary's or a
+  prioritization's "output" for chaining purposes, which is a design call,
+  not a mechanical patch — and it sits inside logic the authoring session
+  already flagged as needing a tuning pass once checked against a live
+  model, so a blind patch risks working against whatever that pass changes.
+- `evals/LEARNED.md` still has no entries — no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the stale
+  2026-08-18 report; the already-open "Nightly Evals GitHub Action has been
+  failing" item is unaffected and remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (outside the
+  repo working directory) and ran both `python3 -m py_compile
+  synergyai_app.py agent.py` and `python3 evals/run_evals.py --dry-run`
+  against the real pinned packages — both passed clean (7 fixtures loaded),
+  no API calls made. Re-ran an AST import scan over both `synergyai_app.py`
+  and `agent.py` against `requirements.txt`: all third-party imports map 1:1
+  to pins (`agent` is a new local module tonight and imports nothing
+  third-party itself, matching its own docstring's claim); no drift.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened
+  or edited by this session.
+
 ---
 
 ## 2026-11-18 (third entry — interactive session, ScopeBot can now act)
