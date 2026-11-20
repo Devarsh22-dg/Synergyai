@@ -811,6 +811,46 @@ only once it is actually decided.
 
 ---
 
+## 2026-11-20
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py` and `agent.py` are unchanged since
+  last night's `d32df9f`; no new commits landed on `main` between last
+  night's routine and tonight's.
+- Read last night's project-mismatch fix (`d32df9f`) end to end: records the
+  project a ScopeBot plan was proposed for and discards it with a chat notice
+  if the sidebar's project selector has since changed. Confirmed it's
+  correct and self-contained, no follow-on issue found.
+- Re-read `agent.py` (`run_jobs`, `validate_jobs`, the tool schemas) looking
+  for anything short of the already-open "previous_step chaining" item
+  (2026-11-19) — found nothing new.
+- `evals/LEARNED.md` still has no entries — no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the stale
+  2026-08-18 report; the already-open "Nightly Evals GitHub Action has been
+  failing" item is unaffected and remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (outside the
+  repo working directory) and ran both `python3 -m py_compile
+  synergyai_app.py agent.py` and `python3 evals/run_evals.py --dry-run`
+  against the real pinned packages — both passed clean (7 fixtures loaded),
+  no API calls made. Re-ran an AST import scan over `synergyai_app.py` and
+  `agent.py` against `requirements.txt`: all third-party imports map 1:1 to
+  pins; no drift.
+- Grepped the repo for stale `otp_email.py` references: none found outside
+  this log.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened or
+  edited by this session.
+
+No new items added to the Open items list tonight — nothing surfaced that
+wasn't already tracked above.
+
+---
+
 ## 2026-11-19
 
 **Committed**
