@@ -811,6 +811,56 @@ only once it is actually decided.
 
 ---
 
+## 2026-11-21
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py`, `agent.py`, `auth.py`, `db.py`, and
+  `theme.py` are unchanged since last night's `6531339`; no new commits had
+  landed on `main` between last night's routine and tonight's.
+- Read `agent.py` end to end for the first time this session (it was added
+  2026-11-18 and reviewed by the 2026-11-19/20 routines, but not by this
+  session before tonight) and cross-checked every `deps[...]` call in
+  `run_jobs()` against the real generator signatures in `synergyai_app.py`
+  (`generate_document`, `generate_data_dictionary`, `generate_asis_tobe`,
+  `generate_stories`, `generate_test_cases`, `generate_glossary`,
+  `generate_prioritization`, `analyze_gaps`) — all match, no signature drift.
+  Independently confirmed the already-open "previous_step chaining" gap
+  (2026-11-19) is exactly as described; found no additional, unlisted defect
+  in the executor.
+- Re-read the ScopeBot sidebar integration (`synergyai_app.py` ~lines
+  2908-3050: pending-plan confirm/cancel, the project-mismatch discard, the
+  `queue_jobs`/`ask_clarifying_question`/`update_project_field` tool-call
+  handling) looking specifically for anything short of what the 2026-11-19
+  and 2026-11-20 entries already found or confirmed. Nothing new — the
+  project-mismatch fix and the status-value validation on
+  `update_project_field` are both still correct and self-contained.
+- `evals/LEARNED.md` still has no entries — no confirmed AI-output regression
+  to act on. `evals/latest_report.md` is still the stale 2026-08-18 report;
+  the already-open "Nightly Evals GitHub Action has been failing" item is
+  unaffected and remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (outside the
+  repo working directory) and ran both `python3 -m py_compile
+  synergyai_app.py agent.py auth.py db.py theme.py` and `python3
+  evals/run_evals.py --dry-run` against the real pinned packages — both
+  passed clean (7 fixtures loaded), no API calls made. Re-ran an AST import
+  scan over `synergyai_app.py` and `agent.py` against `requirements.txt`:
+  all third-party imports map 1:1 to pins; no drift.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened or
+  edited by this session (note: `auth.py` was opened for the py_compile check
+  above only — a syntax check, not a read-or-edit review of its contents or
+  logic).
+
+No new items added to the Open items list tonight — nothing surfaced that
+wasn't already tracked above.
+
+---
+
 ## 2026-11-20
 
 **Committed**
