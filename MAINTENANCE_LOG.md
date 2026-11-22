@@ -811,6 +811,55 @@ only once it is actually decided.
 
 ---
 
+## 2026-11-22
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py`, `agent.py`, `auth.py`, `db.py`, and
+  `theme.py` are unchanged since the 2026-11-19 routine's `d32df9f`; no new
+  commits had landed on `main` between last night's routine and tonight's
+  (last night's and the night before's own commits were log-only, same as
+  tonight's).
+- Read `agent.py` end to end myself (not just cross-checked against the open
+  items list) and independently re-derived the already-open "previous_step
+  chaining" gap (2026-11-19) from the code directly, including the detail
+  that `analyze_gaps`'s success branch sets `previous_output = source_text`
+  (the text fed *into* the analysis) rather than `out` (the analysis's own
+  findings) — this matches the existing entry's wording exactly, so counted
+  as independent confirmation, not a new finding.
+- Grepped `synergyai_app.py` and `agent.py` for a handful of other common bug
+  shapes not called out by name in any open item (bare `except:`, `eval`/
+  `exec`/`pickle`/`subprocess`/`os.system`, hardcoded `API_KEY = "..."`
+  literals, `TODO`/`FIXME`/`XXX`/`HACK` markers) — none found.
+- `evals/LEARNED.md` still has no entries — no confirmed AI-output regression
+  to act on. `evals/latest_report.md` is still the stale 2026-08-18 report;
+  the already-open "Nightly Evals GitHub Action has been failing" item is
+  unaffected and remains unresolved.
+- No Python dependencies were pre-installed in this environment (fresh
+  container); installed `requirements.txt` into a scratch venv (outside the
+  repo working directory) and ran both `python3 -m py_compile
+  synergyai_app.py agent.py auth.py db.py theme.py` and `python3
+  evals/run_evals.py --dry-run` against the real pinned packages — both
+  passed clean (7 fixtures loaded), no API calls made. Ran an AST import scan
+  over `synergyai_app.py` and `agent.py` against `requirements.txt`: all
+  third-party imports map 1:1 to pins; no drift.
+- Grepped the whole repo for stale `otp_email.py` references: the only
+  occurrences anywhere are in this log's own history of making that same
+  check.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened or
+  edited by this session (note: `auth.py` was opened for the `py_compile`
+  check above only — a syntax check, not a read-or-edit review of its
+  contents or logic).
+
+No new items added to the Open items list tonight — nothing surfaced that
+wasn't already tracked above.
+
+---
+
 ## 2026-11-21
 
 **Committed**
