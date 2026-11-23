@@ -811,6 +811,53 @@ only once it is actually decided.
 
 ---
 
+## 2026-11-23
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py`, `agent.py`, `auth.py`, `db.py`, and
+  `theme.py` are unchanged since `d32df9f` (2026-11-19); no new commits had
+  landed on `main` between last night's routine and tonight's (the three
+  nights in between were log-only, same as tonight's).
+- Installed `requirements.txt` into a fresh scratch venv (this container had
+  no Python packages pre-installed) and ran both `python3 -m py_compile
+  synergyai_app.py agent.py auth.py db.py theme.py` and `python3
+  evals/run_evals.py --dry-run` against the real pinned packages — both
+  passed clean (7 fixtures loaded), no API calls made.
+- Ran an AST import scan over `synergyai_app.py`, `agent.py`, `auth.py`,
+  `db.py`, and `theme.py` against `requirements.txt`: every third-party
+  import resolves to a pinned package or a local module; no drift.
+- Grepped `synergyai_app.py`, `agent.py`, and `theme.py` for common bug
+  shapes not already named in any open item (bare `except:`, `eval`/`exec`/
+  `pickle`/`subprocess`/`os.system`, `TODO`/`FIXME`/`XXX`/`HACK` markers):
+  none found.
+- Grepped the whole repo for stale `otp_email.py` references: none found
+  outside this log's own history.
+- `evals/LEARNED.md` still has no entries — no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the stale
+  2026-08-18 report; the already-open "Nightly Evals GitHub Action has been
+  failing" item is unaffected and remains unresolved.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened or
+  edited by this session (note: `auth.py` was opened for the `py_compile`
+  check above only — a syntax check, not a read-or-edit review of its
+  contents or logic).
+- Given the code is unchanged and has already had four consecutive
+  independent thorough reads (2026-11-19 through 2026-11-22) turn up nothing
+  beyond what's already tracked, tonight's own review leaned on the
+  mechanical checks above (compile, dry-run, import drift, bug-shape grep)
+  rather than re-doing a full line-by-line read of unchanged code — flagging
+  this explicitly so the pattern is visible rather than silently repeating a
+  "read it all again" claim each night the code hasn't moved.
+
+No new items added to the Open items list tonight — nothing surfaced that
+wasn't already tracked above.
+
+---
+
 ## 2026-11-22
 
 **Committed**
