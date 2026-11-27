@@ -811,6 +811,59 @@ only once it is actually decided.
 
 ---
 
+## 2026-11-27
+
+**Committed**
+
+Nothing committed tonight besides this log entry.
+
+**Worth knowing**
+
+- No code change made. `synergyai_app.py`, `agent.py`, `auth.py`, `db.py`, and
+  `theme.py` are unchanged since `d32df9f` (2026-11-19); no new commits had
+  landed on `main` between last night's routine and tonight's (the seven
+  nights in between were log-only, same as tonight's).
+- Fresh container again (no Python dependencies pre-installed); installed
+  `requirements.txt` into a scratch venv and ran both `python3 -m py_compile
+  synergyai_app.py agent.py auth.py db.py theme.py` and `python3
+  evals/run_evals.py --dry-run` against the real pinned packages — both
+  passed clean (7 fixtures loaded), no API calls made. Verified with `pip
+  list --format=freeze` that every installed package version is an exact
+  match for its `requirements.txt` pin (no resolver substitutions).
+- Ran a fresh AST import scan over `synergyai_app.py`, `agent.py`, `theme.py`,
+  `auth.py`, and `db.py` against `requirements.txt`: every third-party
+  import resolves to a pinned package; the rest are local modules
+  (`agent`, `auth`, `db`, `theme`) or stdlib — no drift.
+- Grepped `synergyai_app.py`, `agent.py`, and `theme.py` for common bug
+  shapes not already named in any open item (bare `except:`, `eval`/`exec`/
+  `pickle`/`subprocess`/`os.system`, hardcoded `API_KEY = "..."` literals,
+  `TODO`/`FIXME`/`XXX`/`HACK` markers): none found.
+- Grepped the whole repo for stale `otp_email.py` references: none found
+  outside this log's own history of making that same check.
+- `evals/LEARNED.md` still has no entries — no confirmed AI-output
+  regression to act on. `evals/latest_report.md` is still the stale
+  2026-08-18 report; the already-open "Nightly Evals GitHub Action has been
+  failing" item is unaffected and remains unresolved.
+- Unlike the last several nights, which leaned on the mechanical checks
+  above and cited prior nights' line-by-line reads, tonight did a fresh,
+  direct read of the entirety of `synergyai_app.py` (all ~3,050 lines) and
+  all of `agent.py` and `theme.py` end to end, rather than taking the
+  "unchanged since d32df9f" fact as a reason to skip reading it. Nothing
+  found that isn't already named in the Open items list above — every
+  pattern noticed (the `generate_glossary`/`generate_prioritization`
+  previous-step chaining gap in `agent.py`'s `run_jobs`, the SSRF guard's
+  structure, the markdown-escaping gaps, the stale-result-on-failure
+  pattern, etc.) matches an entry already recorded there.
+- `auth.py`, `db.py`, `AUTH_ENABLED`, and `check_access()` were not opened or
+  edited by this session (note: `auth.py` was opened for the `py_compile`
+  check above only — a syntax check, not a read-or-edit review of its
+  contents or logic).
+
+No new items added to the Open items list tonight — nothing surfaced that
+wasn't already tracked above.
+
+---
+
 ## 2026-11-26
 
 **Committed**
